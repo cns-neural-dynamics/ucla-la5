@@ -1,0 +1,6 @@
+# crash files
+crash-*
+*.swp
+.idea/
+.DS_Store
+*.pyc
