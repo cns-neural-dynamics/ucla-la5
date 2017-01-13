@@ -1,8 +1,8 @@
 #!/share/apps/anaconda/bin/python
 import os
 import sys
-from nipype.interfaces.fsl import FSLCommand, MCFLIRT, utils, MeanImage, ApplyWarp, TemporalFilter, IsotropicSmooth
-from nipype.interfaces.freesurfer import BBRegister, ReconAll
+from nipype.interfaces.fsl import BET, FSLCommand, MCFLIRT, utils, MeanImage, ApplyWarp, TemporalFilter, IsotropicSmooth
+from nipype.interfaces.freesurfer import BBRegister, ReconAll, MRIConvert
 from nipype.pipeline.engine import Workflow, Node
 from nipype.interfaces.io import SelectFiles, DataSink, DataGrabber
 from nipype.interfaces.utility import IdentityInterface, Function
@@ -32,19 +32,24 @@ data_out_dir = os.path.join(base_path, 'data_out', 'ucla_la5')
 
 # Define path for functional (epi image) and T1 image and create a node
 datasource = Node(interface=DataGrabber(infields=['subject_id'],
-    outfields=['epi', 't1_brain']), name='datasource')
+    outfields=['epi', 't1']), name='datasource')
 datasource.inputs.base_directory = data_in_dir
 datasource.inputs.template = '*'
 datasource.inputs.sort_filelist = True
+
 datasource.inputs.field_template = dict(epi=os.path.join('%s', 'func', '%s_task-stopsignal_bold.nii.gz'),
-                                       t1_brain=os.path.join('%s', 'anat', '%s_T1w.nii.gz' ))
+                                       t1=os.path.join('%s', 'mri', 'T1.mgz' ))
 datasource.inputs.template_args = dict(epi=[['subject_id', 'subject_id']],
-                                  t1_brain=[['subject_id', 'subject_id']])
+                                         t1=[['subject_id']])
 datasource.inputs.subject_id = subjects_list
 
-reconall = Node(ReconAll(), name='reconAll')
-reconall.inputs.directive = 'all'
-reconall.inputs.subjects_dir = data_in_dir
+# convert files fromm .nii to gu
+mriconv = Node(MRIConvert(), name='mri_convert')
+mriconv.inputs.out_type = 'nii.gz'
+
+# bet = Node(BET(), name='bet')
+# bet.output_file = 'T1_brain.nii.gz'
+# bet.inputs.mask = True
 
 # registration T1-MNI
 bbreg = Node(BBRegister(), name='bbRegister')
@@ -83,10 +88,12 @@ preproc.base_dir = data_out_dir
 preproc.connect([
        # Define iterables and ipnut files
        (infosource,          datasource,     [('subject_id', 'subject_id' )] ),
-       (datasource,          reconall,      [('t1_brain'  , 'T1_files'   )] ),
-       (infosource,          reconall,       [('subject_id', 'subject_id' )] ),
+       # (datasource,          bet,            [('t1'        , 'in_file'    )] ),
+       # (bet,                 data_sink,      [('out_file'  , 'bet'        ),
+       #                                        ('mask_file' , 'bet.mask'   )] ),
+       (datasource,          mriconv   ,     [('t1'        , 'in_file'    )] ),
        (infosource,          bbreg,          [('subject_id', 'subject_id' )] ),
-       (reconall,            bbreg,          [('brainmask' , 'source_file')])
+       (bet,            bbreg,          [('out_file' , 'source_file')])
        ])
 
 # save graph of the workflow into the workflow_graph folder
