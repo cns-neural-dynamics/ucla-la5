@@ -2,7 +2,7 @@
 import os
 import sys
 from nipype.interfaces.fsl import FSLCommand, MCFLIRT, utils, MeanImage, ApplyWarp, TemporalFilter, IsotropicSmooth
-from nipype.interfaces.freesurfer import BBRegister
+from nipype.interfaces.freesurfer import BBRegister, ReconAll
 from nipype.pipeline.engine import Workflow, Node
 from nipype.interfaces.io import SelectFiles, DataSink, DataGrabber
 from nipype.interfaces.utility import IdentityInterface, Function
@@ -30,8 +30,7 @@ base_path = os.path.join(os.sep, 'home', 'jdafflon', 'scratch', 'personal')
 data_in_dir  = os.path.join(base_path, 'data_in', 'ucla_la5', 'ds000030')
 data_out_dir = os.path.join(base_path, 'data_out', 'ucla_la5')
 
-# info = dict(epi=[['subject_id', os.path.join('func',
-#     'sub-%s_task-stopsignal_bold.nii.gz' %subject_id)]])
+# Define path for functional (epi image) and T1 image and create a node
 datasource = Node(interface=DataGrabber(infields=['subject_id'],
     outfields=['epi', 't1_brain']), name='datasource')
 datasource.inputs.base_directory = data_in_dir
@@ -42,25 +41,22 @@ datasource.inputs.field_template = dict(epi=os.path.join('%s', 'func', '%s_task-
 datasource.inputs.template_args = dict(epi=[['subject_id', 'subject_id']],
                                   t1_brain=[['subject_id', 'subject_id']])
 datasource.inputs.subject_id = subjects_list
-# Define path for functional (epi image) and T1 image
-# image_files = {'epi': os.path.join(data_in_dir, '{subject_id}', 'func',
-#     'sub-%s_task-stopsignal_bold.nii.gz' %subject_id),
-#                't1_brain' : os.path.join(data_in_dir, '{subject_id}', 'anat',
-#                    'sub-%s_T1w.nii.gz'%subject_id)}
 
-# Initialise node that select input files
-# input_files = Node(SelectFiles(image_files), name = 'Input_Data')
-# set path that is common to all subjects
-# input_files.base_dir = data_in_dir
+reconall = Node(ReconAll(), name='reconAll')
+reconall.inputs.directive = 'all'
+reconall.inputs.subjects_dir = data_in_dir
 
-# Define path for the MNI template without (_brain) and with skull
+# registration T1-MNI
+bbreg = Node(BBRegister(), name='bbRegister')
+bbreg.inputs.init = 'fsl'
+bbreg.inputs.contrast_type = 't1'
+bbreg.inputs.out_fsl_file = True
+bbreg.inputs.subjects_dir = data_in_dir
+
+# Define path for the MNI template without skull
 reg_mni_reference_brain = os.path.join(os.environ['FSLDIR'], 'data', 'standard',
         'MNI152_T1_2mm_brain.nii.gz')
 
-# registration T1-MNI
-# bbRegister = Node(BBRegister(), name='bbRegister')
-# bbRegister.inputs.contrast_type = 't1'
-# bbRegister.inputs.init = 'fsl'
 #------------------------------------------------------------------------------
 #                             Set up Workflow
 #------------------------------------------------------------------------------
@@ -86,9 +82,11 @@ preproc.base_dir = data_out_dir
 # Define connection between nodes
 preproc.connect([
        # Define iterables and ipnut files
-       (infosource,          datasource,     [('subject_id', 'subject_id' )] )
-       # (input_files,        BBRegister,      [('t1_brain'  , 'source_file')] ),
-       # (infosource,         BBRegister,      [('subject_id', 'subject_id' )] )
+       (infosource,          datasource,     [('subject_id', 'subject_id' )] ),
+       (datasource,          reconall,      [('t1_brain'  , 'T1_files'   )] ),
+       (infosource,          reconall,       [('subject_id', 'subject_id' )] ),
+       (infosource,          bbreg,          [('subject_id', 'subject_id' )] ),
+       (reconall,            bbreg,          [('brainmask' , 'source_file')])
        ])
 
 # save graph of the workflow into the workflow_graph folder
