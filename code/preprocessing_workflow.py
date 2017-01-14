@@ -3,6 +3,7 @@ import os
 import sys
 from nipype.interfaces.fsl import BET, FSLCommand, MCFLIRT, utils, MeanImage, ApplyWarp, TemporalFilter, IsotropicSmooth
 from nipype.interfaces.freesurfer import BBRegister, ReconAll, MRIConvert
+from nipype.interfaces.ants import Registration, ApplyTransforms
 from nipype.pipeline.engine import Workflow, Node
 from nipype.interfaces.io import SelectFiles, DataSink, DataGrabber
 from nipype.interfaces.utility import IdentityInterface, Function
@@ -45,7 +46,7 @@ datasource.inputs.subject_id = subjects_list
 
 # convert files fromm .nii to gu
 mriconv = Node(MRIConvert(), name='mri_convert')
-mriconv.inputs.out_type = 'nii.gz'
+mriconv.inputs.out_type = 'niigz'
 
 # bet = Node(BET(), name='bet')
 # bet.output_file = 'T1_brain.nii.gz'
@@ -87,13 +88,15 @@ preproc.base_dir = data_out_dir
 # Define connection between nodes
 preproc.connect([
        # Define iterables and ipnut files
-       (infosource,          datasource,     [('subject_id', 'subject_id' )] ),
-       # (datasource,          bet,            [('t1'        , 'in_file'    )] ),
-       # (bet,                 data_sink,      [('out_file'  , 'bet'        ),
-       #                                        ('mask_file' , 'bet.mask'   )] ),
-       (datasource,          mriconv   ,     [('t1'        , 'in_file'    )] ),
-       (infosource,          bbreg,          [('subject_id', 'subject_id' )] ),
-       (bet,            bbreg,          [('out_file' , 'source_file')])
+       (infosource,          datasource,     [('subject_id'     ,'subject_id'  )] ),
+       # (datasource,          bet,            [('t1'           , 'in_file'    )] ),
+       # (bet,                 data_sink,      [('out_file'     , 'bet'        ),
+       #                                        ('mask_file'    , 'bet.mask'   )] ),
+       (datasource,          mriconv,        [('t1'             , 'in_file'    )] ),
+       (infosource,          bbreg,          [('subject_id'     , 'subject_id' )] ),
+       (mriconv,             bbreg,          [('out_file'       , 'source_file')] ),
+       (bbreg,               data_sink,      [('out_fsl_file'   , 'bbreg.fsl'  ),
+                                              ('out_reg_file'   , 'bbreg.reg'  ),
        ])
 
 # save graph of the workflow into the workflow_graph folder
