@@ -170,7 +170,9 @@ infosource.iterables = ('subject_id', subjects_list)
 data_sink = Node(DataSink(), name = 'DataSink')
 data_sink.inputs.base_directory = os.path.join(data_out_dir, 'preprocessing_out')
 # data_sink.inputs.container = '{subject_id}'
-substitutions = [('_subject_id_', ''), ('_fwhm', 'fwhm')]
+substitutions = [('_subject_id_', ''),
+                 ('_fwhm', 'fwhm'),
+                 ('_warpall', 'warpall')]
 data_sink.inputs.substitutions = substitutions
 
 # Define workflow name and where output will be saved
