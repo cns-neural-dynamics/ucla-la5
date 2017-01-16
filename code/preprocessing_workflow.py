@@ -97,7 +97,8 @@ antsreg = Node(Registration(), name='antsreg')
 # antsreg.inputs.use_histogram_matching= [False, False, True]
 # antsreg.inputs.write_composite_transform = True
 
-
+# parameters from:
+# http://miykael.github.io/nipype-beginner-s-guide/normalize.html
 antsreg.inputs.args = '--float'
 antsreg.inputs.collapse_output_transforms = True
 antsreg.inputs.fixed_image = template
@@ -130,7 +131,7 @@ antsreg.inputs.write_composite_transform = True
 # Corregister the median to surface
 bbreg = Node(BBRegister(), name='bbRegister')
 bbreg.inputs.init = 'fsl'
-bbreg.inputs.contrast_type = 't1'
+bbreg.inputs.contrast_type = 't2'
 bbreg.inputs.out_fsl_file = True
 bbreg.inputs.subjects_dir = data_in_dir
 
@@ -181,9 +182,6 @@ preproc.connect([
        # iterate over epi and t1 files
        (infosource,          fslsource,     [('subject_id'     ,'subject_id'     )] ),
        (infosource,          datasource,    [('subject_id'     , 'subject_id'    )] ),
-       # (fslsource,          bet,            [('t1'           , 'in_file'       )] ),
-       # (bet,                 data_sink,      [('out_file'     , 'bet'           ),
-       #                                        ('mask_file'    , 'bet.mask'      )] ),
        (datasource,          mean_image,     [('epi'            , 'in_file'       )] ),
        # (mean_image,          data_sink       [('out_file'       , 'meanimage'     )] ),
        (fslsource,           mgz2nii,        [('T1'             , 'in_file'       )] ),
@@ -207,9 +205,6 @@ preproc.connect([
        (merge,               warpall,        [('out'            , 'transforms'    )] ),
        (warpall,             data_sink,        [('output_image'  ,
                                                           'warp_complete.warpall')] ),
-       # (mgz2nii,             bbreg,          [('out_file'       , 'source_file   ')] ),
-       # (bbreg,               data_sink,      [('out_fsl_file'   , 'bbreg.fsl'     ),
-       #                                        ('out_reg_file'   , 'bbreg.reg'     ),
        ])
 
 # save graph of the workflow into the workflow_graph folder
