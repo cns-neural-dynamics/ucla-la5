@@ -1,7 +1,7 @@
 #!/share/apps/anaconda/bin/python
 import os
 import sys
-from nipype.interfaces.fsl import Info, FSLCommand, MeanImage
+from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth
 from nipype.interfaces.freesurfer import BBRegister, MRIConvert
 from nipype.interfaces.ants import Registration, ApplyTransforms
 from nipype.interfaces.c3 import C3dAffineTool
@@ -11,6 +11,14 @@ from nipype.interfaces.io import SelectFiles, DataSink, FreeSurferSource, DataGr
 from nipype.interfaces.utility import IdentityInterface, Function
 from nipypext import nipype_wrapper
 import argparse
+
+def get_warp_file(in_file):
+    """
+    ApplyTransforms ouptu is a list. This function gets the path to warped file
+    from the import generated list
+    """
+    path2file = in_file[0]
+    return path2file
 
 #------------------------------------------------------------------------------
 #                              Specify Variabless
@@ -54,6 +62,12 @@ fslsource.inputs.subjects_dir = data_in_dir
 # Generate mean image - only for the EPI image
 mean_image = Node(MeanImage(), name = 'Mean_Image')
 # mean_image.inputs.out_file = 'MeanImage.nii.gz'
+
+# motion correction
+mot_par = Node(MCFLIRT(), name='motion_correction')
+mot_par.inputs.mean_vol = True
+mot_par.inputs.save_rms = True
+mot_par.inputs.save_plots =True
 
 # convert FreeSurfer's MGZ format to nii.gz format
 mgz2nii = Node(MRIConvert(), name='mri_convert')
@@ -126,8 +140,6 @@ antsreg.inputs.transform_parameters=[(0.1,), (0.1,), (0.1, 3.0, 0.0)]
 antsreg.inputs.use_histogram_matching= True
 antsreg.inputs.write_composite_transform = True
 
-#TODO: check how to check the number of nodes
-
 # Corregister the median to surface
 bbreg = Node(BBRegister(), name='bbRegister')
 bbreg.inputs.init = 'fsl'
@@ -155,6 +167,34 @@ warpall.inputs.interpolation='Linear'
 warpall.inputs.num_threads = 1
 warpall.inputs.terminal_output = 'file' # writes output to file
 warpall.inputs.invert_transform_flags = [False, False]
+
+# get path from warp file
+warp2file = Node(name='warp2file', interface=Function(input_names=['in_file'],
+    output_names=['out_file'], function=get_warp_file))
+
+# Perform ICA to find components related to motion (implemented on ICA-Aroma)
+# inputs for the ICA-aroma function
+ica_aroma = Node(name='ICA_aroma',
+                 interface=Function(input_names=['inFile', 'outDir', 'affmat',
+                 'warp', 'mc', 'subject_id'],
+                                    output_names=['output_file'],
+                                    function=nipype_wrapper.get_ica_aroma))
+outDir = os.path.join(data_out_dir,'preprocessing_out', 'ica_aroma')
+ica_aroma.inputs.outDir = outDir
+
+# spatial filtering
+iso_smooth_epi = Node(IsotropicSmooth(), name = 'SpatialFilter')
+iso_smooth_epi.inputs.fwhm = 5
+
+# temporal filtering
+# note: TR for this experiment is 2 and we are setting a filter of 100s.
+# Therefore, fwhm = 0.5 Hrz/0.01 Hrz = 50.
+# The function here, however, requires the fwhm (aka sigma) of this value, hence, its half.
+temp_filt = Node(TemporalFilter(), name='TemporalFilter')
+#TODO: double check that you should use a high pass filter. As you want the
+# quick changes in time
+temp_filt.inputs.highpass_sigma = 25
+
 #------------------------------------------------------------------------------
 #                             Set up Workflow
 #------------------------------------------------------------------------------
@@ -182,31 +222,52 @@ preproc.base_dir = data_out_dir
 # Define connection between nodes
 preproc.connect([
        # iterate over epi and t1 files
-       (infosource,          fslsource,     [('subject_id'     ,'subject_id'     )] ),
-       (infosource,          datasource,    [('subject_id'     , 'subject_id'    )] ),
-       (datasource,          mean_image,     [('epi'            , 'in_file'       )] ),
+       (infosource,          fslsource,      [('subject_id'     ,'subject_id'     )] ),
+       (infosource,          datasource,     [('subject_id'     , 'subject_id'    )] ),
+       # get motion parameters
+       (datasource,          mot_par,        [('epi'            , 'in_file'       )] ),
+       # get mean image (functional data)
+       (mot_par,             mean_image,     [('out_file'            , 'in_file'       )] ),
        # (mean_image,          data_sink       [('out_file'       , 'meanimage'     )] ),
        (fslsource,           mgz2nii,        [('T1'             , 'in_file'       )] ),
        (mgz2nii,             convert2itk,    [('out_file'       , 'reference_file')] ),
        (mean_image,          convert2itk,    [('out_file'       , 'source_file'   )] ),
+       # Co-register T1 and functional image
        (infosource,          bbreg,          [('subject_id'     , 'subject_id'    )] ),
        (mean_image,          bbreg,          [('out_file'       , 'source_file'   )] ),
        (bbreg,               convert2itk,    [('out_fsl_file'   , 'transform_file')] ),
+       # Normalise T1 to MNI
        (datasource,          antsreg,        [('t1'             , 'moving_image'  )] ),
+       # concatenate affine and ants transforms into a list
        (antsreg,             merge,          [('composite_transform', 'in1'       )] ),
+       (convert2itk,         merge,          [('itk_transform'  , 'in2'           )] ),
        (antsreg,             data_sink,      [('warped_image'   ,
                                                             'antsreg.warped_image'),
                                               ('inverse_warped_image',
                                                     'antsreg.inverse_warped_image'),
                                               ('composite_transform',
-                                                              'antsreg.transform'),
+                                                              'antsreg.transform' ),
                                               ('inverse_composite_transform',
-                                                      'antsreg.inverse_transform')] ),
-       (convert2itk,         merge,          [('itk_transform'  , 'in2'           )] ),
+                                                      'antsreg.inverse_transform' )] ),
+       # Use T1 transfomration to register functional image to MNI space
        (mean_image,          warpall,        [('out_file'       , 'input_image'   )] ),
        (merge,               warpall,        [('out'            , 'transforms'    )] ),
-       (warpall,             data_sink,        [('output_image'  ,
-                                                          'warp_complete.warpall')] ),
+       (warpall,             data_sink,      [('output_image'   ,
+                                                          'warp_complete.warpall' )] ),
+       # # do spatial filtering (functional data)
+       (warpall,             warp2file,      [('output_image'   , 'in_file'       )] ),
+       (warp2file,           iso_smooth_epi, [('out_file'       , 'in_file'       )] ),
+       # ICA-AROMA
+       # run ICA in native space and pass corresponding trasnformations
+       (iso_smooth_epi,          ica_aroma,      [('out_file'            , 'inFile'        )] ),
+       (bbreg,               ica_aroma,      [('out_fsl_file'   , 'affmat'        )] ),
+       # TODO: check if this is the correct file
+       (antsreg,             ica_aroma,      [('composite_transform'   , 'warp'          )] ),
+       (infosource,          ica_aroma,      [('subject_id'     , 'subject_id'    )] ),
+       (mot_par,             ica_aroma,      [('par_file'       , 'mc'            )] ),
+       # Apply temporal filtering
+       (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
+       (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
        ])
 
 # save graph of the workflow into the workflow_graph folder
