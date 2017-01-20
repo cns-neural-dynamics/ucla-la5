@@ -1,7 +1,7 @@
 #!/share/apps/anaconda/bin/python
 import os
 import sys
-from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth
+from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth, BET
 from nipype.interfaces.freesurfer import BBRegister, MRIConvert
 from nipype.interfaces.ants import Registration, ApplyTransforms
 from nipype.interfaces.c3 import C3dAffineTool
@@ -12,7 +12,7 @@ from nipype.interfaces.utility import IdentityInterface, Function
 from nipypext import nipype_wrapper
 import argparse
 
-def get_warp_file(in_file):
+def get_file(in_file):
     """
     ApplyTransforms ouptu is a list. This function gets the path to warped file
     from the import generated list
@@ -113,10 +113,12 @@ mot_par.inputs.save_plots =True
 mgz2nii = Node(MRIConvert(), name='mri_convert')
 mgz2nii.inputs.out_type = 'niigz'
 
-# bet = Node(BET(), name='bet')
-# bet.output_file = 'T1_brain.nii.gz'
-# bet.inputs.mask = True
-
+bet = Node(BET(), name='bet')
+bet.inputs.frac = 0.3 # recommended by ICA-Aroma manual
+bet.inputs.mask = True
+# save BET mask so that it can be passed to ICA-AROMA
+# getmask =  Node(name='getBetMask', interface=Function(input_names=['in_file'],
+#     output_names=['out_file'], function=get_file))
 # Registration:  T1 - MNI
 antsreg = Node(Registration(), name='antsreg')
 # TODO: check validity of this values
@@ -220,9 +222,9 @@ warpall.inputs.invert_transform_flags = [False, False]
 
 # get path from warp file
 warpall2file = Node(name='warpmean2file', interface=Function(input_names=['in_file'],
-    output_names=['out_file'], function=get_warp_file))
+    output_names=['out_file'], function=get_file))
 warpmean2file = Node(name='warpall2file', interface=Function(input_names=['in_file'],
-    output_names=['out_file'], function=get_warp_file))
+    output_names=['out_file'], function=get_file))
 
 # Perform ICA to find components related to motion (implemented on ICA-Aroma)
 # inputs for the ICA-aroma function
@@ -331,13 +333,19 @@ preproc.connect([
        (merge,               warpall,         [('out'            , 'transforms'   )] ),
        (warpall,             data_sink,       [('output_image'   ,
                                                           'warp_complete.warpall' )] ),
-       # do spatial filtering (mean functional data)
+       # need to convert list of path given by warp all into path
+       (warpall,             warpall2file,    [('output_image'   , 'in_file'      )] ),
        (warpmean,             warpmean2file,  [('output_image'   , 'in_file'      )] ),
+       # skull strip EPI for ICA-AROMA
+       # brain-extract registered EPI Image (#TODO: double check if this is really needed.
+       # I was not sure if there was a skull or not)
+       (warpall2file,        bet,             [('out_file'   , 'in_file'       )] ),
+       (bet,                 data_sink,       [('mask_file'      , 'bet.mask'     )] ),
+       # do spatial filtering (mean functional data)
        (warpmean2file,        iso_smooth_mean,[('out_file'       , 'in_file'      )] ),
        (iso_smooth_mean,      data_sink,      [('out_file'       ,
                                                              'spatial_filter.mean')] ),
        # do spatial filtering (functional data)
-       (warpall,             warpall2file,    [('output_image'   , 'in_file'      )] ),
        (warpall2file,        iso_smooth_all,  [('out_file'       , 'in_file'      )] ),
        (iso_smooth_all,      data_sink,       [('out_file'       ,
                                                               'spatial_filter.all')] ),
