@@ -20,13 +20,53 @@ def get_warp_file(in_file):
     path2file = in_file[0]
     return path2file
 
+def get_VOIs(preprocessed_image, segmented_image_path, segmented_regions_path,
+        subject_id):
+    '''Extract VOIs from preprocesssed image using the provided atlas and the
+    corresponding Lookup table (where the different regions are labled)'''
+
+    import os
+    import numpy as np
+    import nibabel as nib
+
+    # Load segmented image and obtain data from the image
+    segmented_image =  nib.load(segmented_image_path)
+    segmented_image_data = segmented_image.get_data()
+    # Load the Lookup Table which assigns each region to one specific pixel
+    # intensity
+    segmented_regions = np.genfromtxt(segmented_regions_path, dtype = [('numbers',
+    '<i8'), ('regions', 'S31'), ('labels', 'i4')], delimiter=',')
+
+    # Load subjects preprocessed image and extract data from the image
+    image = nib.load(preprocessed_image)
+    image_data = image.get_data()
+    # Obtain different time points (corrisponding to the image TR)
+    time = image_data.shape[3]
+    # Initialise matrix where the averaged BOLD signal for each region will be
+    # saved
+    avg = np.zeros((segmented_regions['labels'].shape[0], time))
+    # Find the voxels on the subject's image that correspond to the voxels on
+    # the labeled image for each time point and calculate the mean BOLD response
+    for region in range(len(segmented_regions)):
+        label = segmented_regions['labels'][region]
+        for t in range(time):
+            data = image_data[:, :, :, t]
+            boolean_mask = np.where(segmented_image_data == label)
+            data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
+            # for all regions calculate the mean BOLD at each time point
+            avg[region, t] = data.mean()
+    # save data into a text file
+    file_name = '%s.txt' % subject_id
+    np.savetxt(file_name, avg, delimiter=' ', fmt='%5e')
+    return os.path.abspath(file_name)
+
 #------------------------------------------------------------------------------
 #                              Specify Variabless
 #------------------------------------------------------------------------------
 # all outputs will ge generated in compressed nifti format
 FSLCommand.set_default_output_type('NIFTI_GZ')
 # location of template file
-template = Info.standard_image('MNI152_T1_2mm_brain.nii.gz')
+template = Info.standard_image('MNI152_T1_2mm.nii.gz')
 
 subjects_list=['sub-10159']
 # subjects_list = ['sub-10159', 'sub-10171', 'sub-10189', 'sub-10193', 'sub-10206',
@@ -114,10 +154,10 @@ antsreg = Node(Registration(), name='antsreg')
 # parameters from:
 # http://miykael.github.io/nipype-beginner-s-guide/normalize.html
 antsreg.inputs.args = '--float'
-antsreg.inputs.collapse_output_transforms = True
+# antsreg.inputs.collapse_output_transforms = True
 antsreg.inputs.fixed_image = template
 antsreg.inputs.initial_moving_transform_com = True
-antsreg.inputs.num_threads = 1
+antsreg.inputs.num_threads = 8
 antsreg.inputs.output_warped_image = True
 antsreg.inputs.output_inverse_warped_image = True
 antsreg.inputs.sigma_units=['vox']*3
@@ -139,6 +179,7 @@ antsreg.inputs.smoothing_sigmas = [[3, 2, 1, 0]]*3
 antsreg.inputs.transform_parameters=[(0.1,), (0.1,), (0.1, 3.0, 0.0)]
 antsreg.inputs.use_histogram_matching= True
 antsreg.inputs.write_composite_transform = True
+antsreg.inputs.save_state = 'savestate.mat'
 
 # Corregister the median to surface
 bbreg = Node(BBRegister(), name='bbRegister')
@@ -158,33 +199,48 @@ merge = Node(Merge(2), interfield=['in2'], name='AntsBBregisterMerge')
 
 ### normalise anatomical and functional image
 # transfrom EPI, first to anatomical and then to MNI
+warpmean = MapNode(ApplyTransforms(), name='warpmean', iterfield=['input_image'])
+warpmean.inputs.args = '--float'
+warpmean.inputs.reference_image = template # reference image space that you wish to warp INTO
+warpmean.inputs.input_image_type = 3 # define input image type scalar(1), vector(2), tensor(3)
+warpmean.inputs.interpolation = 'Linear'
+# TODO:check num thread
+warpmean.inputs.num_threads = 1
+warpmean.inputs.terminal_output = 'file' # writes output to file
+warpmean.inputs.invert_transform_flags = [False, False]
+
 warpall = MapNode(ApplyTransforms(), name='warpall', iterfield=['input_image'])
 warpall.inputs.args = '--float'
-warpall.inputs.reference_image = template # reference image space that you wish to warp INTO
-warpall.inputs.input_image_type = 3 # define input image type scalar(1), vector(2), tensor(3)
-warpall.inputs.interpolation='Linear'
-# TODO:check num thread
+warpall.inputs.reference_image = template
+warpall.inputs.input_image_type = 3
+warpall.inputs.interpolation = 'Linear'
 warpall.inputs.num_threads = 1
 warpall.inputs.terminal_output = 'file' # writes output to file
 warpall.inputs.invert_transform_flags = [False, False]
 
 # get path from warp file
-warp2file = Node(name='warp2file', interface=Function(input_names=['in_file'],
+warpall2file = Node(name='warpmean2file', interface=Function(input_names=['in_file'],
+    output_names=['out_file'], function=get_warp_file))
+warpmean2file = Node(name='warpall2file', interface=Function(input_names=['in_file'],
     output_names=['out_file'], function=get_warp_file))
 
 # Perform ICA to find components related to motion (implemented on ICA-Aroma)
 # inputs for the ICA-aroma function
 ica_aroma = Node(name='ICA_aroma',
-                 interface=Function(input_names=['inFile', 'outDir', 'affmat',
-                 'warp', 'mc', 'subject_id'],
+                 interface=Function(input_names=['inFile', 'outDir',
+                 'mc', 'subject_id'],
                                     output_names=['output_file'],
                                     function=nipype_wrapper.get_ica_aroma))
 outDir = os.path.join(data_out_dir,'preprocessing_out', 'ica_aroma')
 ica_aroma.inputs.outDir = outDir
+# ica_aroma.inputs.warp = '/home/jdafflon/scratch/personal/data_out/preprocessing_out/registration/t1_brain_to_mni/field_files/sub101/T1_brain_field.nii.gz'
 
 # spatial filtering
-iso_smooth_epi = Node(IsotropicSmooth(), name = 'SpatialFilter')
-iso_smooth_epi.inputs.fwhm = 5
+iso_smooth_all = Node(IsotropicSmooth(), name = 'SpatialFilterAll')
+iso_smooth_all.inputs.fwhm = 5
+# spatial filtering
+iso_smooth_mean = Node(IsotropicSmooth(), name = 'SpatialFilterMean')
+iso_smooth_mean.inputs.fwhm = 5
 
 # temporal filtering
 # note: TR for this experiment is 2 and we are setting a filter of 100s.
@@ -195,6 +251,20 @@ temp_filt = Node(TemporalFilter(), name='TemporalFilter')
 # quick changes in time
 temp_filt.inputs.highpass_sigma = 25
 
+# Extract VOIs
+#----------------
+# extract_vois = Node(name='extract_VOIs',
+#                          interface = Function(input_names  =
+#                                                             ['preprocessed_image',
+#                                                               'segmented_image_path',
+#                                                               'segmented_regions_path',
+#                                                               'subject_id'],
+#                                               output_names = ['output_file'],
+#                                               function     = get_VOIs))
+# extract_vois.inputs.segmented_image_path = os.path.join(base_path, 'data_in',
+#         'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
+# extract_vois.inputs.segmented_regions_path = os.path.join(base_path, 'data_in', 'voi_extraction',
+#         'LookupTable')
 #------------------------------------------------------------------------------
 #                             Set up Workflow
 #------------------------------------------------------------------------------
@@ -212,7 +282,7 @@ data_sink.inputs.base_directory = os.path.join(data_out_dir, 'preprocessing_out'
 # data_sink.inputs.container = '{subject_id}'
 substitutions = [('_subject_id_', ''),
                  ('_fwhm', 'fwhm'),
-                 ('_warpall', 'warpall')]
+                 ('_warpmean', 'warpmean')]
 data_sink.inputs.substitutions = substitutions
 
 # Define workflow name and where output will be saved
@@ -222,17 +292,19 @@ preproc.base_dir = data_out_dir
 # Define connection between nodes
 preproc.connect([
        # iterate over epi and t1 files
-       (infosource,          fslsource,      [('subject_id'     ,'subject_id'     )] ),
+       (infosource,          fslsource,      [('subject_id'     , 'subject_id'    )] ),
        (infosource,          datasource,     [('subject_id'     , 'subject_id'    )] ),
        # get motion parameters
        (datasource,          mot_par,        [('epi'            , 'in_file'       )] ),
+       (mot_par,             data_sink,      [('par_file'       ,
+                                                               'mcflirt.par_file')] ),
        # get mean image (functional data)
-       (mot_par,             mean_image,     [('out_file'            , 'in_file'       )] ),
+       (mot_par,             mean_image,     [('out_file'       , 'in_file'       )] ),
        # (mean_image,          data_sink       [('out_file'       , 'meanimage'     )] ),
+       # Co-register T1 and functional image
        (fslsource,           mgz2nii,        [('T1'             , 'in_file'       )] ),
        (mgz2nii,             convert2itk,    [('out_file'       , 'reference_file')] ),
        (mean_image,          convert2itk,    [('out_file'       , 'source_file'   )] ),
-       # Co-register T1 and functional image
        (infosource,          bbreg,          [('subject_id'     , 'subject_id'    )] ),
        (mean_image,          bbreg,          [('out_file'       , 'source_file'   )] ),
        (bbreg,               convert2itk,    [('out_fsl_file'   , 'transform_file')] ),
@@ -249,25 +321,41 @@ preproc.connect([
                                                               'antsreg.transform' ),
                                               ('inverse_composite_transform',
                                                       'antsreg.inverse_transform' )] ),
-       # Use T1 transfomration to register functional image to MNI space
-       (mean_image,          warpall,        [('out_file'       , 'input_image'   )] ),
-       (merge,               warpall,        [('out'            , 'transforms'    )] ),
-       (warpall,             data_sink,      [('output_image'   ,
+       # Use T1 transfomration to register mean functional image to MNI space
+       (mean_image,          warpmean,        [('out_file'       , 'input_image'  )] ),
+       (merge,               warpmean,        [('out'            , 'transforms'   )] ),
+       (warpmean,             data_sink,      [('output_image'   ,
+                                                          'warp_complete.warpmean')] ),
+       # Use T1 transformation to register the functional image to MNI space
+       (datasource,          warpall,         [('epi'            , 'input_image'  )] ),
+       (merge,               warpall,         [('out'            , 'transforms'   )] ),
+       (warpall,             data_sink,       [('output_image'   ,
                                                           'warp_complete.warpall' )] ),
-       # # do spatial filtering (functional data)
-       (warpall,             warp2file,      [('output_image'   , 'in_file'       )] ),
-       (warp2file,           iso_smooth_epi, [('out_file'       , 'in_file'       )] ),
+       # do spatial filtering (mean functional data)
+       (warpmean,             warpmean2file,  [('output_image'   , 'in_file'      )] ),
+       (warpmean2file,        iso_smooth_mean,[('out_file'       , 'in_file'      )] ),
+       (iso_smooth_mean,      data_sink,      [('out_file'       ,
+                                                             'spatial_filter.mean')] ),
+       # do spatial filtering (functional data)
+       (warpall,             warpall2file,    [('output_image'   , 'in_file'      )] ),
+       (warpall2file,        iso_smooth_all,  [('out_file'       , 'in_file'      )] ),
+       (iso_smooth_all,      data_sink,       [('out_file'       ,
+                                                              'spatial_filter.all')] ),
        # ICA-AROMA
-       # run ICA in native space and pass corresponding trasnformations
-       (iso_smooth_epi,          ica_aroma,      [('out_file'            , 'inFile'        )] ),
-       (bbreg,               ica_aroma,      [('out_fsl_file'   , 'affmat'        )] ),
+       # run ICA using normalised image
+       # (iso_smooth_all,     ica_aroma,       [('out_file'         , 'inFile'        )] ),
+       # (bbreg,               ica_aroma,      [('out_fsl_file'   , 'affmat'        )] ),
        # TODO: check if this is the correct file
-       (antsreg,             ica_aroma,      [('composite_transform'   , 'warp'          )] ),
-       (infosource,          ica_aroma,      [('subject_id'     , 'subject_id'    )] ),
-       (mot_par,             ica_aroma,      [('par_file'       , 'mc'            )] ),
+       # (antsreg,             ica_aroma,      [('warped_image'   , 'warp'   )] ),
+       # (infosource,          ica_aroma,      [('subject_id'     , 'subject_id'     )] ),
+       # (mot_par,             ica_aroma,      [('par_file'       , 'mc'             )] ),
        # Apply temporal filtering
-       (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
-       (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
+       # (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
+       # (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
+       # (temp_filt,           extract_vois,   [('out_file'       ,
+       #                                                        'preprocessed_image')] ),
+       # (infosource,          extract_vois,   [('subject_id'     , 'subject_id'    )] ),
+       # (extract_vois,        data_sink,      [('output_file'    ,   'extract_vois')] ),
        ])
 
 # save graph of the workflow into the workflow_graph folder
