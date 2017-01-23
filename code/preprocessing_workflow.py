@@ -230,7 +230,7 @@ warpmean2file = Node(name='warpall2file', interface=Function(input_names=['in_fi
 # inputs for the ICA-aroma function
 ica_aroma = Node(name='ICA_aroma',
                  interface=Function(input_names=['inFile', 'outDir',
-                 'mc', 'subject_id'],
+                 'mc', 'subject_id', 'mask'],
                                     output_names=['output_file'],
                                     function=nipype_wrapper.get_ica_aroma))
 outDir = os.path.join(data_out_dir,'preprocessing_out', 'ica_aroma')
@@ -325,7 +325,6 @@ preproc.connect([
                                                       'antsreg.inverse_transform' )] ),
        # Use T1 transfomration to register mean functional image to MNI space
        (mean_image,          warpmean,        [('out_file'       , 'input_image'  )] ),
-       (merge,               warpmean,        [('out'            , 'transforms'   )] ),
        (warpmean,             data_sink,      [('output_image'   ,
                                                           'warp_complete.warpmean')] ),
        # Use T1 transformation to register the functional image to MNI space
@@ -351,15 +350,14 @@ preproc.connect([
                                                               'spatial_filter.all')] ),
        # ICA-AROMA
        # run ICA using normalised image
-       # (iso_smooth_all,     ica_aroma,       [('out_file'         , 'inFile'        )] ),
-       # (bbreg,               ica_aroma,      [('out_fsl_file'   , 'affmat'        )] ),
-       # TODO: check if this is the correct file
-       # (antsreg,             ica_aroma,      [('warped_image'   , 'warp'   )] ),
-       # (infosource,          ica_aroma,      [('subject_id'     , 'subject_id'     )] ),
-       # (mot_par,             ica_aroma,      [('par_file'       , 'mc'             )] ),
+       # TODO: check if this is the correct input file
+       (iso_smooth_all,     ica_aroma,       [('out_file'         , 'inFile'        )] ),
+       (infosource,          ica_aroma,      [('subject_id'     , 'subject_id'     )] ),
+       (mot_par,             ica_aroma,      [('par_file'       , 'mc'             )] ),
+       (bet,                 ica_aroma,      [('mask_file'      , 'mask'           )] ),
        # Apply temporal filtering
-       # (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
-       # (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
+       (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
+       (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
        # (temp_filt,           extract_vois,   [('out_file'       ,
        #                                                        'preprocessed_image')] ),
        # (infosource,          extract_vois,   [('subject_id'     , 'subject_id'    )] ),
