@@ -116,45 +116,10 @@ mgz2nii.inputs.out_type = 'niigz'
 bet = Node(BET(), name='bet')
 bet.inputs.frac = 0.3 # recommended by ICA-Aroma manual
 bet.inputs.mask = True
-# save BET mask so that it can be passed to ICA-AROMA
-# getmask =  Node(name='getBetMask', interface=Function(input_names=['in_file'],
-#     output_names=['out_file'], function=get_file))
-# Registration:  T1 - MNI
-antsreg = Node(Registration(), name='antsreg')
-# TODO: check validity of this values
-# antsreg.inputs.args = '--float'
-# antsreg.inputs.collapse_output_transforms = True
-# antsreg.inputs.fixed_image = template
-# antsreg.inputs.initial_moving_transform_com = True
-# antsreg.inputs.output_warped_image = True
-# antsreg.inputs.sigma_units=['vox']*3
-# antsreg.inputs.transforms = ['Rigid', 'Affine', 'SyN']
-# antsreg.inputs.metric = ['MI', 'MI', 'CC']
-# antsreg.inputs.terminal_output = 'file'
-# antsreg.inputs.winsorize_lower_quantile=0.005
-# antsreg.inputs.winsorize_upper_quantile=0.995
-# antsreg.inputs.convergence_threshold = [1e-08, 1e-08, -0.01]
-# antsreg.inputs.convergence_window_size = [20,20,5]
-# antsreg.inputs.metric=['Mattes', 'Mattes', ['Mattes', 'CC']]
-# antsreg.inputs.metric_weight = [1.0, 1.0, [0.5, 0.5]]
-# antsreg.inputs.number_of_iterations = [[1000, 500, 250, 100],                                                                             [1000, 500, 250, 100],
-#                                        [100,   70,  50,  20]]
-# antsreg.inputs.radius_or_number_of_bins = [32,32,[32,4]]
-# antsreg.inputs.sampling_percentage=[0.3, 0.3, [None, None]]
-# antsreg.inputs.sampling_strategy = ['Regular', 'Regular', [None, None]]
-# antsreg.inputs.shrink_factors = [[3, 2, 1],
-#                           [3, 2, 1],
-#                           [4, 2, 1]]
-# antsreg.inputs.smoothing_sigmas = [[4.0, 2.0, 1.0],
-#                             [4.0, 2.0, 1.0],
-#                             [1.0, 0.5, 0.0]]
-# antsreg.inputs.transform_parameters=[(0.1,), (0.1,), (0.2, 3.0, 0.0)]
-# antsreg.inputs.use_estimate_learning_rate_once = [True]*3
-# antsreg.inputs.use_histogram_matching= [False, False, True]
-# antsreg.inputs.write_composite_transform = True
 
 # parameters from:
 # http://miykael.github.io/nipype-beginner-s-guide/normalize.html
+antsreg = Node(Registration(), name='antsreg')
 antsreg.inputs.args = '--float'
 # antsreg.inputs.collapse_output_transforms = True
 antsreg.inputs.fixed_image = template
@@ -235,7 +200,6 @@ ica_aroma = Node(name='ICA_aroma',
                                     function=nipype_wrapper.get_ica_aroma))
 outDir = os.path.join(data_out_dir,'preprocessing_out', 'ica_aroma')
 ica_aroma.inputs.outDir = outDir
-# ica_aroma.inputs.warp = '/home/jdafflon/scratch/personal/data_out/preprocessing_out/registration/t1_brain_to_mni/field_files/sub101/T1_brain_field.nii.gz'
 
 # spatial filtering
 iso_smooth_all = Node(IsotropicSmooth(), name = 'SpatialFilterAll')
@@ -302,7 +266,6 @@ preproc.connect([
                                                                'mcflirt.par_file')] ),
        # get mean image (functional data)
        (mot_par,             mean_image,     [('out_file'       , 'in_file'       )] ),
-       # (mean_image,          data_sink       [('out_file'       , 'meanimage'     )] ),
        # Co-register T1 and functional image
        (fslsource,           mgz2nii,        [('T1'             , 'in_file'       )] ),
        (mgz2nii,             convert2itk,    [('out_file'       , 'reference_file')] ),
