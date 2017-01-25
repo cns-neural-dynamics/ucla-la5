@@ -30,7 +30,7 @@ sub_list = ['sub-10428','sub-10429', 'sub-10438' 'sub-10440' 'sub-10448'
         'sub-11090', 'sub-11097', 'sub-11098,' 'sub-11104', 'sub-11105',
         'sub-11106', 'sub-11108', 'sub-11112', 'sub-11121', 'sub-11122',
         'sub-11128', 'sub-11131', 'sub-11142', 'sub-11143', 'sub-11149',
-        'sub-11156', '         ',
+        'sub-11156',
         ]
 # sub_list = ['sub-50004' 'sub-50005' 'sub-50006' 'sub-50007' 'sub-50008'
 #         'sub-50010' 'sub-50013' 'sub-50014' 'sub-50015' 'sub-50016' 'sub-50020'
@@ -41,7 +41,14 @@ sub_list = ['sub-10428','sub-10429', 'sub-10438' 'sub-10440' 'sub-10448'
 #         'sub-50059' 'sub-50060' 'sub-50061' 'sub-50064' 'sub-50066' 'sub-50067'
 #         'sub-50069' 'sub-50073' 'sub-50075' 'sub-50076' 'sub-50077' 'sub-50080'
 #         'sub-50081' 'sub-50083' 'sub-50085']
-sub2id = {}
+pickle_file = os.path.join(base_path, 'reconall_data', 'sub2id.pickle')
+# check if pickle file exists
+if os.path.exists(pickle_file):
+    with open(pickle_file, 'rb') as rfp:
+        sub2id = pickle.load(rfp)
+else:
+    sub2id = {}
+
 for sub in sub_list:
     file_path = os.path.join(base_path, sub, 'anat', ''.join([sub, '_T1w.nii.gz']))
     cmd = 'fsl_sub recon-all -all -i {0} -subjid {1} -sd {2}/reconall_data'.format(file_path, sub,base_path)
@@ -49,4 +56,6 @@ for sub in sub_list:
     sub2id[sub] = job_id
 
 # save pickle with the corresponding job-id for each subject
-pickle.dump(sub2id, open(os.path.join(base_path, 'reconall_data', 'sub2id.pickle'),'wb'))
+with open(pickle_file, 'wb') as wfp:
+    pickle.dump(sub2id, wfp)
+
