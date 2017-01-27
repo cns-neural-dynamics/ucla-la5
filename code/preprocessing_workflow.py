@@ -172,7 +172,6 @@ def preprocessing_pipeline(subjects_list):
     warpmean.inputs.reference_image = template # reference image space that you wish to warp INTO
     warpmean.inputs.input_image_type = 3 # define input image type scalar(1), vector(2), tensor(3)
     warpmean.inputs.interpolation = 'Linear'
-    # TODO:check num thread
     warpmean.inputs.num_threads = 1
     warpmean.inputs.terminal_output = 'file' # writes output to file
     warpmean.inputs.invert_transform_flags = [False, False]
@@ -214,8 +213,6 @@ def preprocessing_pipeline(subjects_list):
     # Therefore, fwhm = 0.5 Hrz/0.01 Hrz = 50.
     # The function here, however, requires the fwhm (aka sigma) of this value, hence, its half.
     temp_filt = Node(TemporalFilter(), name='TemporalFilter')
-    #TODO: double check that you should use a high pass filter. As you want the
-    # quick changes in time
     temp_filt.inputs.highpass_sigma = 25
 
     # Extract VOIs
@@ -301,8 +298,6 @@ def preprocessing_pipeline(subjects_list):
            (warpall,             warpall2file,    [('output_image'   , 'in_file'      )] ),
            (warpmean,            warpmean2file,  [('output_image'   , 'in_file'      )] ),
            # skull strip EPI for ICA-AROMA
-           # brain-extract registered EPI Image (#TODO: double check if this is really needed.
-           # I was not sure if there was a skull or not)
            (warpall2file,        bet,             [('out_file'   , 'in_file'       )] ),
            (bet,                 data_sink,       [('mask_file'      , 'bet.mask'     )] ),
            # do spatial filtering (mean functional data)
@@ -315,7 +310,6 @@ def preprocessing_pipeline(subjects_list):
                                                                   'spatial_filter.all')] ),
            # ICA-AROMA
            # run ICA using normalised image
-           # TODO: check if this is the correct input file
            (iso_smooth_all,     ica_aroma,       [('out_file'         , 'inFile'        )] ),
            (infosource,          ica_aroma,      [('subject_id'     , 'subject_id'     )] ),
            (mot_par,             ica_aroma,      [('par_file'       , 'mc'             )] ),
