@@ -12,6 +12,7 @@ from nipype.interfaces.utility import IdentityInterface, Function
 from nipypext import nipype_wrapper
 import argparse
 
+
 def get_file(in_file):
     """
     ApplyTransforms ouptu is a list. This function gets the path to warped file
@@ -219,18 +220,18 @@ temp_filt.inputs.highpass_sigma = 25
 
 # Extract VOIs
 #----------------
-# extract_vois = Node(name='extract_VOIs',
-#                          interface = Function(input_names  =
-#                                                             ['preprocessed_image',
-#                                                               'segmented_image_path',
-#                                                               'segmented_regions_path',
-#                                                               'subject_id'],
-#                                               output_names = ['output_file'],
-#                                               function     = get_VOIs))
-# extract_vois.inputs.segmented_image_path = os.path.join(base_path, 'data_in',
-#         'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
-# extract_vois.inputs.segmented_regions_path = os.path.join(base_path, 'data_in', 'voi_extraction',
-#         'LookupTable')
+extract_vois = Node(name='extract_VOIs',
+                         interface = Function(input_names  =
+                                                            ['preprocessed_image',
+                                                              'segmented_image_path',
+                                                              'segmented_regions_path',
+                                                              'subject_id'],
+                                              output_names = ['output_file'],
+                                              function     = get_VOIs))
+extract_vois.inputs.segmented_image_path = os.path.join(base_path, 'data_in',
+        'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
+extract_vois.inputs.segmented_regions_path = os.path.join(base_path, 'data_in', 'voi_extraction',
+        'LookupTable')
 #------------------------------------------------------------------------------
 #                             Set up Workflow
 #------------------------------------------------------------------------------
@@ -288,6 +289,7 @@ preproc.connect([
                                                       'antsreg.inverse_transform' )] ),
        # Use T1 transfomration to register mean functional image to MNI space
        (mean_image,          warpmean,        [('out_file'       , 'input_image'  )] ),
+       (merge,               warpmean,         [('out'            , 'transforms'   )] ),
        (warpmean,             data_sink,      [('output_image'   ,
                                                           'warp_complete.warpmean')] ),
        # Use T1 transformation to register the functional image to MNI space
@@ -297,7 +299,7 @@ preproc.connect([
                                                           'warp_complete.warpall' )] ),
        # need to convert list of path given by warp all into path
        (warpall,             warpall2file,    [('output_image'   , 'in_file'      )] ),
-       (warpmean,             warpmean2file,  [('output_image'   , 'in_file'      )] ),
+       (warpmean,            warpmean2file,  [('output_image'   , 'in_file'      )] ),
        # skull strip EPI for ICA-AROMA
        # brain-extract registered EPI Image (#TODO: double check if this is really needed.
        # I was not sure if there was a skull or not)
@@ -321,10 +323,10 @@ preproc.connect([
        # Apply temporal filtering
        (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
        (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
-       # (temp_filt,           extract_vois,   [('out_file'       ,
-       #                                                        'preprocessed_image')] ),
-       # (infosource,          extract_vois,   [('subject_id'     , 'subject_id'    )] ),
-       # (extract_vois,        data_sink,      [('output_file'    ,   'extract_vois')] ),
+       (temp_filt,           extract_vois,   [('out_file'       ,
+                                                              'preprocessed_image')] ),
+       (infosource,          extract_vois,   [('subject_id'     , 'subject_id'    )] ),
+       (extract_vois,        data_sink,      [('output_file'    ,   'extract_vois')] ),
        ])
 
 # save graph of the workflow into the workflow_graph folder
