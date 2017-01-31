@@ -4,3 +4,5 @@ crash-*
 .idea/
 .DS_Store
 *.pyc
+recon-all.o*
+recon-all.e*
