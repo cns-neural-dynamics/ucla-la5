@@ -6,8 +6,9 @@ from data_analysis import *
 import subprocess
 import threading
 import shlex
-from data_analysis import data_analysis
-from group_analysis_pairwise import group_analysis_pairwise
+from preprocessing_workflow import preprocessing_pipeline
+# from data_analysis import data_analysis
+# from group_analysis_pairwise import group_analysis_pairwise
 
 #------------------------------------------------------------------------------
 # Define which analysis to perform
@@ -22,14 +23,16 @@ network_comp = 'between_network'
 # network_comp = 'within_network'
 # network_comp = 'full_network'
 fwhm = 'fwhm_5'
+subject_list = [['sub-10429', 'sub-10438', 'sub-10440']]
 # sub_list = ['sub-10171', 'sub-10189', 'sub-10193', 'sub-10206',
 #         'sub-10217', 'sub-10225', 'sub-10227', 'sub-10228', 'sub-10235',
 #         'sub-10249', 'sub-10269', 'sub-10271', 'sub-10273', 'sub-10274',
 #         'sub-10280', 'sub-10290', 'sub-10292', 'sub-10299', 'sub-10304',
 #         'sub-10316', 'sub-10321', 'sub-10325', 'sub-10329', 'sub-10339',
 #         'sub-10340', 'sub-10345', 'sub-10347', 'sub-10356', 'sub-10361',
-#         'sub-10365', 'sub-10376', 'sub-10377', 'sub-10388']
-# sub_list = ['sub-10429', 'sub-10438', 'sub-10440', 'sub-10448',
+#         'sub-10365', 'sub-10376', 'sub-10377', 'sub-10388', 'sub-10429',
+#         'sub-10438', 'sub-10440']
+# sub_list = ['sub-10448',
 #         'sub-10455', 'sub-10460', 'sub-10471', 'sub-10478', 'sub-10487',
 #         'sub-10492', 'sub-10501', 'sub-10506', 'sub-10517', 'sub-10523',
 #         'sub-10524', 'sub-10525', 'sub-10527', 'sub-10530', 'sub-10557',
