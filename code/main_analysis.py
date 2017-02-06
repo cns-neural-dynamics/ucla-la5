@@ -65,17 +65,16 @@ subject_list = [['sub-10429', 'sub-10438', 'sub-10440']]
 # sub_list = ['sub-50043', 'sub-50047', 'sub-50048', 'sub-50049', 'sub-50050',
 #         'sub-50051', 'sub-50052', 'sub-50053', 'sub-50054', 'sub-50055',
 #         'sub-50056', 'sub-50058', 'sub-50059']
-
 base_path = os.path.join(os.path.sep, 'home', 'jdafflon', 'scratch', 'personal')
 
-print('%s analysis')
-print('-----------------------------------------------------------------------')
 #------------------------------------------------------------------------------
 #                           call pre-processing
 #------------------------------------------------------------------------------
-for sub in subject_list:
-    preprocessing_pipeline(sub)
-
+if do_preprocessing:
+    for sub in subject_list:
+        preprocessing_pipeline(sub)
+    print('preprocessing %s' %sub)
+    print('-----------------------------------------------------------------------')
 #------------------------------------------------------------------------------
 #                               extract ROIs
 #------------------------------------------------------------------------------
@@ -97,7 +96,8 @@ if do_extract_roi:
     # Path to image where the different networks are specified
     network_path = os.path.join(base_path, 'data_in', 'voi_extraction',
                    'PNAS_Smith09_rsn10.nii')
-
+    # get subjects_id from a list of lists in subject_list
+    subjects_id = subject_list[0]
     # Extract ROIs
     extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
                 segmented_image_path, segmented_regions, output_path, network=True,
@@ -107,16 +107,19 @@ if do_extract_roi:
 #                              data analysis
 #------------------------------------------------------------------------------
 if do_data_analysis:
+    # get subjects_id from a list of lists in subject_list
+    subjects_id = subject_list[0]
+
     print('performing data analysis')
     bold_path = os.path.join(base_path, 'data_out', 'data_analysis', 'pairwise_comparison')
     # perform data_analysis with different valus for the n_cluster
     n_clusters = [25] # 15, 20, 25, 30]
     rand_inds = [15] #, 45]     # randomisation index necessary for randmio_und. The higher
                          # this parameter the more random will the generated matrix be
-    n_groups = 3
-    # analysis_type = 'synchrony'
+    n_groups = 2
+    analysis_type = 'synchrony'
     # analysis_type = 'BOLD'
-    analysis_type = 'graph_analysis'
+    # analysis_type = 'graph_analysis'
     # statistics_type = 'hutchenson'
     statistics_type = 'ttest'
     # statistics_type = '1ANOVA'
