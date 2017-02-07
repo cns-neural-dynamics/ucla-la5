@@ -367,7 +367,7 @@ def bold_plot_threshold(data, n_regions, threshold=1.3):
 #-------------------------------------------------------------------------------------------------
 #                                           Settings
 #-------------------------------------------------------------------------------------------------
-def data_analysis(subjects_id, rand_ind, n_cluster, pairwise=True,
+def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True,
         sliding_window=True, graph_analysis=True, window_size=20,
         n_time_points=184, network_comp='between_network'):
     ''' Compute the main analysis. This function calculates the synchrony,
@@ -377,6 +377,8 @@ def data_analysis(subjects_id, rand_ind, n_cluster, pairwise=True,
         - subjects_id: A list of subjects_id
         - rand_ind:    Randomisation index -- necessary for generating random
                        matrix
+        - analysis_type: Define type of analysis to be performed. Possbile
+                        inputs: synchrony or BOLD.
         - n_cluster:   Number of clusters used for k-means
         - pairwise:    Binary input. Is a pairwise comparison going to be
                        performed?
@@ -459,32 +461,31 @@ def data_analysis(subjects_id, rand_ind, n_cluster, pairwise=True,
             for roi in range(n_regions):
                 hiltrans_sliding_window[roi, :] = slice_window_avg(hiltrans[roi, :], window_size)
 
+        if analysis_type == 'BOLD':
+            # calculate thresholded BOLD activity. Threshold is set to 1.3
+            thr_data = bold_plot_threshold(data, n_regions, threshold=1.3)
+            # Save thresholded image of BOLD
+            fig = plt.figure()
+            plt.imshow(thr_data, interpolation='nearest')
+            fig.savefig(os.path.join(out_dir, 'pairwise_comparison', network_comp,
+                'rand_ind_%02d' %rand_ind, '%s' %subject_id,
+                'threshold_matrix', '%s_BOLD.png' %(subject_id)))
+            plt.clf()
+            plt.close()
 
-        # calculate thresholded BOLD activity. Threshold is set to 1.3
-        thr_data = bold_plot_threshold(data, n_regions, threshold=1.3)
-        # Save thresholded image of BOLD
-        fig = plt.figure()
-        plt.imshow(thr_data, interpolation='nearest')
-        fig.savefig(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-            'rand_ind_%02d' %rand_ind, '%s' %subject_id,
-            'threshold_matrix', '%s_BOLD.png' %(subject_id)))
-        pdb.set_trace()
-        plt.clf()
-        plt.close()
-
-        bold_shanon_entropy = {}
-        # Perfom k-means on the BOLD signal
-        kmeans_bold = KMeans(n_clusters=n_cluster)
-        kmeans_bold.fit_transform(np.transpose(thr_data))
-        kmeans_bold_labels= kmeans_bold.labels_
-        # Calculate Shannon Entropy
-        bold_shanon_entropy['bold_h'],  bold_shanon_entropy['s2'],       \
-        bold_shanon_entropy['n_labels_bold'], \
-        bold_shanon_entropy['n_classes_bold'] = shanon_entropy(kmeans_bold_labels)
-        pickle.dump(bold_shanon_entropy, open(os.path.join(out_dir,
-            'pairwise_comparison', network_comp,  'rand_ind_%02d' %rand_ind,
-            '%s' %subject_id,'%02d_clusters' %n_cluster,
-            'bold_shannon_%s.pickle' %(subject_id)), 'wb'))
+            bold_shanon_entropy = {}
+            # Perfom k-means on the BOLD signal
+            kmeans_bold = KMeans(n_clusters=n_cluster)
+            kmeans_bold.fit_transform(np.transpose(thr_data))
+            kmeans_bold_labels= kmeans_bold.labels_
+            # Calculate Shannon Entropy
+            bold_shanon_entropy['bold_h'],  bold_shanon_entropy['s2'],       \
+            bold_shanon_entropy['n_labels_bold'], \
+            bold_shanon_entropy['n_classes_bold'] = shanon_entropy(kmeans_bold_labels)
+            pickle.dump(bold_shanon_entropy, open(os.path.join(out_dir,
+                'pairwise_comparison', network_comp,  'rand_ind_%02d' %rand_ind,
+                '%s' %subject_id,'%02d_clusters' %n_cluster,
+                'bold_shannon_%s.pickle' %(subject_id)), 'wb'))
 
         # Calculate data synchrony following Hellyer-2015_Cognitive
         if pairwise:
