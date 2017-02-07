@@ -110,7 +110,7 @@ def extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
                         boolean_mask = np.where(segmented_image_data == label)
                         data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
                         avg_bold[region, t] = data.mean()
-                np.savetxt(os.path.join(output_path , subject_id, 'fwhm_5',
+                np.savetxt(os.path.join(output_path , subject_id,
                     'within_network_%d.txt' %network), avg_bold, delimiter=' ', fmt='%5e')
             # save avg_bold
         elif network_comp == 'between_network':
@@ -125,10 +125,11 @@ def extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
                                          boolean_filtered_data[2]]
                     ntw_avg[network,t] = data_filtered.mean()
             # save netw_avg
-            np.savetxt(os.path.join(output_path , subject_id, 'fwhm_5', 'between_network.txt') , ntw_avg, delimiter=' ', fmt='%5e')
+            np.savetxt(os.path.join(output_path , subject_id, 'between_network.txt') , ntw_avg, delimiter=' ', fmt='%5e')
         elif network_comp == 'full_network':
+            pdb.set_trace()
             # save data into a text file
-            np.savetxt(os.path.join(output_path, subject_id, 'fwhm5',
+            np.savetxt(os.path.join(output_path, subject_id,
                 '%s.txt' %subject_id), avg, delimiter=' ', fmt='%5e')
 
         print 'Subject %s: Done!' % subject_id
@@ -185,9 +186,12 @@ def hilbert_tranform(data, TR=2, upper_bound=0.07, lower_bound=0.04):
     return hiltrans
 
 def slice_window_avg(array, window_size):
-    """ Perform convolution on the specified sliding window """
+    """ Perform convolution on the specified sliding window. By using the
+    'valid' mode the last time points will be discarded. """
     window = np.ones(int(window_size))/float(window_size)
     return np.convolve(array, window, 'valid')
+    # TODO: use a less conservative approach for convolution ('full' instead of
+    # 'valid').
 
 def calculate_phi(indices, n_regions, hilbert_t_points, hiltrans):
     phi = np.zeros((n_regions, n_regions, hilbert_t_points), dtype=complex)
@@ -344,6 +348,22 @@ def shanon_entropy(labels):
         (n_labels) **2))
     return ent, s2, n_labels, n_classes # count is an array you might want to
 # return n_classes isnted
+
+def bold_plot_threshold(data, n_regions, threshold=1.3):
+    """ This function thresholds the BOLD activity using the passed threshold  """
+    # Calculate states on raw BOLD data
+    z_data = np.zeros((data.shape))
+    thr_data = np.zeros((data.shape))
+    for VOI in range(n_regions):
+        voi_mean = np.mean(data[VOI,:])
+        voi_std = np.std(data[VOI,:])
+        for t in range(data.shape[1]):
+            z_data[VOI, t] = abs(float((data[VOI, t] - voi_mean)) / voi_std)
+            # Threshold BOLD at 1.3
+            if z_data[VOI, t] > threshold:
+                thr_data[VOI, t] = 1
+    return thr_data
+
 #-------------------------------------------------------------------------------------------------
 #                                           Settings
 #-------------------------------------------------------------------------------------------------
@@ -373,7 +393,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, pairwise=True,
     '''
 
     hilbert_t_points = n_time_points - window_size
-    base_path = os.path.join(os.sep, 'scratch' ,'jdafflon', 'personal', 'data_out')
+    base_path = os.path.join(os.sep, 'scratch' ,'jdafflon', 'personal', 'data_out', 'ucla_la5')
     in_dir = os.path.join(base_path, 'preprocessing_out', 'extract_vois')
     out_dir = os.path.join(base_path, 'data_analysis' )
 
@@ -421,10 +441,10 @@ def data_analysis(subjects_id, rand_ind, n_cluster, pairwise=True,
                 'rand_ind_%02d' %rand_ind, '%s' %subject_id, '%02d_clusters' %n_cluster))
         # Import BOLD signal for each VOI
         if network_comp == 'between_network':
-            data_path = os.path.join(in_dir, subject_id, 'fwhm_5', 'between_network.txt')
+            data_path = os.path.join(in_dir, subject_id, 'between_network.txt')
             data = np.genfromtxt(data_path)
         else:
-            data_path = os.path.join(in_dir, subject_id, 'fwhm_5', '%s.txt'
+            data_path = os.path.join(in_dir, subject_id, '%s.txt'
                     %subject_id)
             data = np.genfromtxt(data_path)
         # The first number corresponds to the number of regions in the dataset
@@ -439,23 +459,16 @@ def data_analysis(subjects_id, rand_ind, n_cluster, pairwise=True,
             for roi in range(n_regions):
                 hiltrans_sliding_window[roi, :] = slice_window_avg(hiltrans[roi, :], window_size)
 
-        # Calculate states on raw BOLD data
-        z_data = np.zeros((data.shape))
-        thr_data = np.zeros((data.shape))
-        for VOI in range(n_regions):
-            voi_mean = np.mean(data[VOI,:])
-            voi_std = np.std(data[VOI,:])
-            for t in range(data.shape[1]):
-                z_data[VOI, t] = abs(float((data[VOI, t] - voi_mean)) / voi_std)
-                # Threshold BOLD at 1.3
-                if z_data[VOI, t] > 1.3:
-                    thr_data[VOI, t] = 1
+
+        # calculate thresholded BOLD activity. Threshold is set to 1.3
+        thr_data = bold_plot_threshold(data, n_regions, threshold=1.3)
         # Save thresholded image of BOLD
         fig = plt.figure()
         plt.imshow(thr_data, interpolation='nearest')
         fig.savefig(os.path.join(out_dir, 'pairwise_comparison', network_comp,
             'rand_ind_%02d' %rand_ind, '%s' %subject_id,
             'threshold_matrix', '%s_BOLD.png' %(subject_id)))
+        pdb.set_trace()
         plt.clf()
         plt.close()
 
