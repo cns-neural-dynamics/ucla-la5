@@ -12,16 +12,16 @@ from preprocessing_workflow import preprocessing_pipeline
 
 #------------------------------------------------------------------------------
 # Define which analysis to perform
-do_preprocessing = True
+do_preprocessing = False
 do_extract_roi   = False
-do_data_analysis = False
+do_data_analysis = True
 
 # Define if analysis will be carried out by comparing different regions inside
 # of a predefined network  (within_network) or among different networks
 # (between_networks - you will end up with a 10x10 matrix)
-network_comp = 'between_network'
+# network_comp = 'between_network'
 # network_comp = 'within_network'
-# network_comp = 'full_network'
+network_comp = 'full_network'
 fwhm = 'fwhm_5'
 subject_list = [['sub-10429', 'sub-10438', 'sub-10440']]
 # sub_list = ['sub-10171', 'sub-10189', 'sub-10193', 'sub-10206',
@@ -117,8 +117,8 @@ if do_data_analysis:
     rand_inds = [15] #, 45]     # randomisation index necessary for randmio_und. The higher
                          # this parameter the more random will the generated matrix be
     n_groups = 2
-    analysis_type = 'synchrony'
-    # analysis_type = 'BOLD'
+    # analysis_type = 'synchrony'
+    analysis_type = 'BOLD'
     # analysis_type = 'graph_analysis'
     # statistics_type = 'hutchenson'
     statistics_type = 'ttest'
@@ -129,7 +129,7 @@ if do_data_analysis:
         print 'Running thread: ' + str(rand_ind) + ' ' + str(n_cluster)
         # data_analysis(subjects_id, rand_ind, n_cluster, graph_analysis=True)
         # when calling the between network comparision
-        data_analysis(subjects_id, rand_ind, n_cluster, pairwise=True,
+        data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True,
                       sliding_window=True, graph_analysis=True,
                       network_comp=network_comp)
         group_analysis_pairwise(subjects_id, n_cluster, n_groups, bold_path,

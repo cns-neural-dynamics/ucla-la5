@@ -233,9 +233,16 @@ def mirror_array(array):
     return array + np.transpose(array) - np.diag(array.diagonal())
 
 def calculate_optimal_k(mean_synchrony, indices,n_regions=82, k_lower=0.1, k_upper=1.0, k_step=0.01):
-    """ Iterate over different threshold (k) to find the optimal value. In
-    order obtain the best threshold for all time points, the mean of the
-    synchrony over time is used as the connectivity matrix. """
+    """ Iterate over different threshold (k) to find the optimal value to use a
+    threshold. This function finds the optimal thresold that allows the
+    trade-off between cost and efficiency to be minimal.
+
+    In order obtain the best threshold for all time points, the mean of the
+    synchrony over time is used as the connectivity matrix.
+
+    The here implemented approach was based on Bassett-2009Cognitive
+
+    """
     EC_optima = 0                                         # cost-efficiency
     k_optima = 0                                          # threshold
     for k in np.arange(k_lower, k_upper, k_step):
@@ -473,8 +480,8 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             plt.clf()
             plt.close()
 
-            bold_shanon_entropy = {}
             # Perfom k-means on the BOLD signal
+            bold_shanon_entropy = {}
             kmeans_bold = KMeans(n_clusters=n_cluster)
             kmeans_bold.fit_transform(np.transpose(thr_data))
             kmeans_bold_labels= kmeans_bold.labels_
@@ -507,6 +514,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
 
             # Calculate phi, metastability, synchrony and mean synchrony  for the specified indices
             phi = calculate_phi(indices, n_regions, hilbert_t_points, hiltrans)
+            pdb.set_trace()
             metastability = calculate_metastability(indices, n_regions, phi)
             # save values for metastability
             pickle.dump(metastability, open(os.path.join(out_dir,
@@ -536,6 +544,8 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             # ---------------------------------------------------------------------
             # Graph Theory Measurements
             # ---------------------------------------------------------------------
+            # Calculate optimal threshold that optimises the cost-efficiency of
+            # the current network..
             k_optima = calculate_optimal_k(mean_synchrony, indices)
             print ('Optimal mean threshold: %3f' %k_optima)
 
@@ -566,10 +576,10 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                 #-------------------
                 degree_centrality = np.transpose(degrees_und(synchrony_bin))
 
-                weight = np.zeros(( hilbert_t_points, n_regions))
+                weight = np.zeros((hilbert_t_points, n_regions))
                 w = np.multiply(synchrony, synchrony_bin)
                 # Initialise flatten array so that you have time by regions (140 x
-                # 6724), this will strucutre is necessary in order to perform
+                # 6724), this strucutre is necessary in order to perform
                 # K-means
                 # Ds_flat = np.zeros((hilbert_t_points, (synchrony_bin.shape[0])**2))
                 Ds_flat = {}
@@ -593,7 +603,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
 
                     # Weight
                     #-------------------
-                    # Use the thresholded matrix to calcualte the average of weight over all regions
+                    # Use the thresholded matrix to calculate the average weight over all regions
                     for roi in range(n_regions):
                         weight[t, roi] = np.average(w[:, roi, t])
 
