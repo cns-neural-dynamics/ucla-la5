@@ -467,8 +467,14 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             for roi in range(n_regions):
                 hiltrans_sliding_window[roi, :] = slice_window_avg(hiltrans[roi, :], window_size)
 
+        # When analysing the BOLD data we need to threshold the raw data so that
+        # we have a binary matrix. The threshold here is set to 1.3. The
+        # binarised matrix is then passed to kmeans, which finds possible
+        # clusters of similar BOLD activity inside the data. Every time point is
+        # in this way assigned to a cluster. After this, the function will be
+        # calculated for the next subjct, as this analysis does not need to be
+        # calculated for each pair of region.
         if analysis_type == 'BOLD':
-            # calculate thresholded BOLD activity. Threshold is set to 1.3
             thr_data = bold_plot_threshold(data, n_regions, threshold=1.3)
             # Save thresholded image of BOLD
             fig = plt.figure()
@@ -484,6 +490,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             kmeans_bold = KMeans(n_clusters=n_cluster)
             kmeans_bold.fit_transform(np.transpose(thr_data))
             kmeans_bold_labels= kmeans_bold.labels_
+            pdb.set_trace()
             # Calculate Shannon Entropy
             bold_shanon_entropy['bold_h'],  bold_shanon_entropy['s2'],       \
             bold_shanon_entropy['n_labels_bold'], \
@@ -492,6 +499,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                 'pairwise_comparison', network_comp,  'rand_ind_%02d' %rand_ind,
                 '%s' %subject_id,'%02d_clusters' %n_cluster,
                 'bold_shannon_%s.pickle' %(subject_id)), 'wb'))
+            continue
 
         # Calculate data synchrony following Hellyer-2015_Cognitive
         if pairwise:
@@ -725,6 +733,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                 cluster_centroids = {}
                 for t in range(hilbert_t_points):
                     synchrony_bin_flat[t, :] = np.ndarray.flatten(synchrony_bin[:, :, t])
+                pdb.set_trace()
                 kmeans = KMeans(n_clusters=n_cluster)
                 kmeans.fit_transform(synchrony_bin_flat)
                 kmeans_labels = kmeans.labels_
