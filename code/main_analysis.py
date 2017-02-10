@@ -23,7 +23,7 @@ do_data_analysis = True
 # network_comp = 'within_network'
 network_comp = 'full_network'
 fwhm = 'fwhm_5'
-subject_list = [['sub-10429', 'sub-10438', 'sub-10440']]
+subject_list = [['sub-10429']]
 # sub_list = ['sub-10171', 'sub-10189', 'sub-10193', 'sub-10206',
 #         'sub-10217', 'sub-10225', 'sub-10227', 'sub-10228', 'sub-10235',
 #         'sub-10249', 'sub-10269', 'sub-10271', 'sub-10273', 'sub-10274',

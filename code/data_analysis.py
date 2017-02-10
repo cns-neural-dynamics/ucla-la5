@@ -127,7 +127,6 @@ def extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
             # save netw_avg
             np.savetxt(os.path.join(output_path , subject_id, 'between_network.txt') , ntw_avg, delimiter=' ', fmt='%5e')
         elif network_comp == 'full_network':
-            pdb.set_trace()
             # save data into a text file
             np.savetxt(os.path.join(output_path, subject_id,
                 '%s.txt' %subject_id), avg, delimiter=' ', fmt='%5e')
@@ -514,7 +513,6 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
 
             # Calculate phi, metastability, synchrony and mean synchrony  for the specified indices
             phi = calculate_phi(indices, n_regions, hilbert_t_points, hiltrans)
-            pdb.set_trace()
             metastability = calculate_metastability(indices, n_regions, phi)
             # save values for metastability
             pickle.dump(metastability, open(os.path.join(out_dir,
@@ -571,124 +569,130 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             #     'wb'))
 
             if graph_analysis == True:
-                print('Calculating Graph Theory Measurements')
-                # Degree centrality:
-                #-------------------
-                degree_centrality = np.transpose(degrees_und(synchrony_bin))
+                graph_measures_pickle = os.path.join(out_dir, 'pairwise_comparison',  network_comp, 'rand_ind_%02d' %rand_ind, '%s' %subject_id,'%02d_clusters' %n_cluster, 'graph_measures_%s.pickle' %subject_id)
+                # check if pickle with files already exist. It it exists than
+                # just load it, otherwise perform calculations.
+                if not os.path.isfile(graph_measures_pickle):
 
-                weight = np.zeros((hilbert_t_points, n_regions))
-                w = np.multiply(synchrony, synchrony_bin)
-                # Initialise flatten array so that you have time by regions (140 x
-                # 6724), this strucutre is necessary in order to perform
-                # K-means
-                # Ds_flat = np.zeros((hilbert_t_points, (synchrony_bin.shape[0])**2))
-                Ds_flat = {}
-                SM = {}
-                Ds = {}
-                # SM = np.zeros((hilbert_t_points, n_regions))
-                # Ds = np.zeros((n_regions, n_regions, hilbert_t_points))
-                if network_comp == 'between_network':
-                    network = range(n_regions)
-                    network_list = {}
+                    print('Calculating Graph Theory Measurements')
+                    # Degree centrality:
+                    #-------------------
+                    degree_centrality = np.transpose(degrees_und(synchrony_bin))
+
+                    weight = np.zeros((hilbert_t_points, n_regions))
+                    w = np.multiply(synchrony, synchrony_bin)
+                    # Initialise flatten array so that you have time by regions (140 x
+                    # 6724), this strucutre is necessary in order to perform
+                    # K-means
+                    # Ds_flat = np.zeros((hilbert_t_points, (synchrony_bin.shape[0])**2))
+                    Ds_flat = {}
+                    SM = {}
+                    Ds = {}
+                    # SM = np.zeros((hilbert_t_points, n_regions))
+                    # Ds = np.zeros((n_regions, n_regions, hilbert_t_points))
+                    if network_comp == 'between_network':
+                        network = range(n_regions)
+                        network_list = {}
+                        for t in range(hilbert_t_points):
+                            network_list[t] = network
+
+                    # # check where the network has more then one component
+                    # for t in range(hilbert_t_points):
+                    #     n_components = clustering.number_of_components(synchrony_bin[:,:,t])
+                    #     if len(np.where(clustering.get_components(synchrony_bin[:,:,t])[0]>1)[0])>1:
+                    #         print t
+                    # Iterate over time to obtain different complex network measurements.
                     for t in range(hilbert_t_points):
-                        network_list[t] = network
 
-                # # check where the network has more then one component
-                # for t in range(hilbert_t_points):
-                #     n_components = clustering.number_of_components(synchrony_bin[:,:,t])
-                #     if len(np.where(clustering.get_components(synchrony_bin[:,:,t])[0]>1)[0])>1:
-                #         print t
-                # Iterate over time to obtain different complex network measurements.
-                for t in range(hilbert_t_points):
+                        # Weight
+                        #-------------------
+                        # Use the thresholded matrix to calculate the average weight over all regions
+                        for roi in range(n_regions):
+                            weight[t, roi] = np.average(w[:, roi, t])
 
-                    # Weight
-                    #-------------------
-                    # Use the thresholded matrix to calculate the average weight over all regions
-                    for roi in range(n_regions):
-                        weight[t, roi] = np.average(w[:, roi, t])
+                        # Transitivity:
+                        #-------------------
+                        transitivity = transitivity_bu(synchrony_bin[:, :, t])
 
-                    # Transitivity:
-                    #-------------------
-                    transitivity = transitivity_bu(synchrony_bin[:, :, t])
+                        # Small-worldness
+                        #------------------
+                        # Every time this function is called a new random network is
+                        # generated
+                        print(t)
+                        n_components = clustering.number_of_components(synchrony_bin[:,:,t])
+                        if n_components > 1:
+                            components = dict([(key, []) for key in range(n_components)])
+                            # Get all components and transform numpy array into a python list
+                            # list_components = clustering.get_components(synchrony_bin[:,:,t])[0].tolist()
+                            list_components = clustering.get_components(synchrony_bin[:,:,t])[0]
+                            # Check if all components are composed of more then one region.
+                            # If so, divide the current network into the corresponding
+                            # components, otherwise eliminate the lonely component
+                            # get_components()[0]:  ensure that only the vector of
+                            # component assignments for each node is returned
+                            # if len(np.where(clustering.get_components(synchrony_bin[:,:,t])[0]>1)[0]) == 1:
+                            for component in range(1, n_components + 1):
+                                if np.bincount(list_components)[component] == 1:
+                                    # transform list into np.array to use np.where
+                                    # list_components = np.array(list_components)
+                                    index_to_eliminate = np.where(list_components == component)[0][0]
+                                    # Eliminate first the specified row and then the
+                                    # specified column from the thresholded synchrony matrix
+                                    tmp = np.delete(synchrony_bin[:,:,t],
+                                            index_to_eliminate, 0)
+                                    tmp2 = np.delete(tmp, index_to_eliminate, 1)
+                                    # eliminate the specific network form the network list.
+                                    network_list[t] = np.delete(network_list[t],
+                                            index_to_eliminate, 0)
+                                    print('Node #%d was eliminated at timepoint %d') %(index_to_eliminate, t)
+                                    SM[str(t)], Ds[str(t)] = estimate_small_wordness(tmp2, rand_ind)
+                                    # Flatten the synchrony matrix and path_distance so that it can be given as
+                                    # argument for the K-means
+                                    Ds_flat[str(t)] = np.ndarray.flatten(Ds[str(t)])
 
-                    # Small-worldness
-                    #------------------
-                    # Every time this function is called a new random network is
-                    # generated
-                    print(t)
-                    n_components = clustering.number_of_components(synchrony_bin[:,:,t])
-                    if n_components > 1:
-                        components = dict([(key, []) for key in range(n_components)])
-                        # Get all components and transform numpy array into a python list
-                        # list_components = clustering.get_components(synchrony_bin[:,:,t])[0].tolist()
-                        list_components = clustering.get_components(synchrony_bin[:,:,t])[0]
-                        # Check if all components are composed of more then one region.
-                        # If so, divide the current network into the corresponding
-                        # components, otherwise eliminate the lonely component
-                        # get_components()[0]:  ensure that only the vector of
-                        # component assignments for each node is returned
-                        # if len(np.where(clustering.get_components(synchrony_bin[:,:,t])[0]>1)[0]) == 1:
-                        for component in range(1, n_components + 1):
-                            if np.bincount(list_components)[component] == 1:
-                                # transform list into np.array to use np.where
-                                # list_components = np.array(list_components)
-                                index_to_eliminate = np.where(list_components == component)[0][0]
-                                # Eliminate first the specified row and then the
-                                # specified column from the thresholded synchrony matrix
-                                tmp = np.delete(synchrony_bin[:,:,t],
-                                        index_to_eliminate, 0)
-                                tmp2 = np.delete(tmp, index_to_eliminate, 1)
-                                # eliminate the specific network form the network list.
-                                network_list[t] = np.delete(network_list[t],
-                                        index_to_eliminate, 0)
-                                print('Node #%d was eliminated at timepoint %d') %(index_to_eliminate, t)
-                                SM[str(t)], Ds[str(t)] = estimate_small_wordness(tmp2, rand_ind)
-                                # Flatten the synchrony matrix and path_distance so that it can be given as
-                                # argument for the K-means
-                                Ds_flat[str(t)] = np.ndarray.flatten(Ds[str(t)])
+                                elif 2 <= np.bincount(list_components)[component] < n_regions - 1:
+                                    # check if there is more then one component
+                                    print('More then one component found at timepoint %d') %(t)
+                                    # As all components start from one, iteration should
+                                    # start from 1 and not 0.
+                                    # find index of the elements belonging to this
+                                    # component
+                                    all_indices = range(n_regions)
+                                    # find indices for each component
+                                    indices = np.where(list_components == component)[0]
+                                    # obtain indices for elements that will be
+                                    # discarted
+                                    indices_2_eliminate = np.delete(all_indices, indices, 0)
+                                    tmp  = np.delete(synchrony_bin[:,:,t], indices_2_eliminate, 1)
+                                    # final matrix where the binary synchrony values
+                                    # are saved
+                                    components[component] = np.delete(tmp, indices_2_eliminate, 0)
+                                    # Estimate small-wordness for each component
+                                    element = ''.join((str(t), '_', str(component)))
+                                    SM[element], Ds[element] = estimate_small_wordness(components[component], rand_ind)
+                                    # Flatten the synchrony matrix and path_distance so that it can be given as
+                                    # argument for the K-means
+                                    Ds_flat[element] = np.ndarray.flatten(Ds[element])
+                                else:
+                                    continue
+                        else:
+                            SM[str(t)], Ds[str(t)] = estimate_small_wordness(synchrony_bin[:,:,t], rand_ind)
+                            # Flatten the synchrony matrix and path_distance so that it can be given as
+                            # argument for the K-means
+                            Ds_flat[str(t)] = np.ndarray.flatten(Ds[str(t)])
 
-                            elif 2 <= np.bincount(list_components)[component] < n_regions - 1:
-                                # check if there is more then one component
-                                print('More then one component found at timepoint %d') %(t)
-                                # As all components start from one, iteration should
-                                # start from 1 and not 0.
-                                # find index of the elements belonging to this
-                                # component
-                                all_indices = range(n_regions)
-                                # find indices for each component
-                                indices = np.where(list_components == component)[0]
-                                # obtain indices for elements that will be
-                                # discarted
-                                indices_2_eliminate = np.delete(all_indices, indices, 0)
-                                tmp  = np.delete(synchrony_bin[:,:,t], indices_2_eliminate, 1)
-                                # final matrix where the binary synchrony values
-                                # are saved
-                                components[component] = np.delete(tmp, indices_2_eliminate, 0)
-                                # Estimate small-wordness for each component
-                                element = ''.join((str(t), '_', str(component)))
-                                SM[element], Ds[element] = estimate_small_wordness(components[component], rand_ind)
-                                # Flatten the synchrony matrix and path_distance so that it can be given as
-                                # argument for the K-means
-                                Ds_flat[element] = np.ndarray.flatten(Ds[element])
-                            else:
-                                continue
-                    else:
-                        SM[str(t)], Ds[str(t)] = estimate_small_wordness(synchrony_bin[:,:,t], rand_ind)
-                        # Flatten the synchrony matrix and path_distance so that it can be given as
-                        # argument for the K-means
-                        Ds_flat[str(t)] = np.ndarray.flatten(Ds[str(t)])
-
-                # Save picke for with graph measurements for each subject
-                graph_measures = {'weight': weight,
-                                  'small_wordness': SM,
-                                  'degree_centrality': degree_centrality,
-                                  'path_distance': Ds_flat
-                                  }
-                pickle.dump(graph_measures, open(os.path.join(out_dir,
-                    'pairwise_comparison',  network_comp, 'rand_ind_%02d' %rand_ind,
-                    '%s' %subject_id,'%02d_clusters' %n_cluster,
-                    'graph_measures_%s.pickle' %(subject_id)), 'wb'))
-
+                    # Save picke with graph measurements for each subject
+                    graph_measures = {'weight': weight,
+                                      'small_wordness': SM,
+                                      'degree_centrality': degree_centrality,
+                                      'path_distance': Ds_flat
+                                      }
+                    pickle.dump(graph_measures, open(os.path.join(out_dir,
+                        'pairwise_comparison',  network_comp, 'rand_ind_%02d' %rand_ind,
+                        '%s' %subject_id,'%02d_clusters' %n_cluster,
+                        'graph_measures_%s.pickle' %(subject_id)), 'wb'))
+                else:
+                    graph_measures = pickle.load(open(graph_measures_pickle, 'rb'))
                 # ---------------------------------------------------------------------
                 # Clustering
                 # ---------------------------------------------------------------------
@@ -761,8 +765,6 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                 'pairwise_comparison',  network_comp, 'rand_ind_%02d' %rand_ind,
                 '%s' %subject_id,'%02d_clusters' %n_cluster,
                 'synchrony_data_%s.pickle' %(subject_id)), 'wb'))
-
-            pdb.set_trace()
 
             # Reshuffle data so that it can be saved
             all_phi[idx, 0] = int(subject_id.strip('sub'))
