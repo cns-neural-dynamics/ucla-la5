@@ -733,7 +733,6 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                 cluster_centroids = {}
                 for t in range(hilbert_t_points):
                     synchrony_bin_flat[t, :] = np.ndarray.flatten(synchrony_bin[:, :, t])
-                pdb.set_trace()
                 kmeans = KMeans(n_clusters=n_cluster)
                 kmeans.fit_transform(synchrony_bin_flat)
                 kmeans_labels = kmeans.labels_

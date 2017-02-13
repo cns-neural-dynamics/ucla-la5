@@ -8,7 +8,7 @@ import threading
 import shlex
 from preprocessing_workflow import preprocessing_pipeline
 # from data_analysis import data_analysis
-# from group_analysis_pairwise import group_analysis_pairwise
+from group_analysis_pairwise import group_analysis_pairwise
 
 #------------------------------------------------------------------------------
 # Define which analysis to perform
@@ -23,15 +23,20 @@ do_data_analysis = True
 # network_comp = 'within_network'
 network_comp = 'full_network'
 fwhm = 'fwhm_5'
-subject_list = [['sub-10429']]
-# sub_list = ['sub-10171', 'sub-10189', 'sub-10193', 'sub-10206',
-#         'sub-10217', 'sub-10225', 'sub-10227', 'sub-10228', 'sub-10235',
-#         'sub-10249', 'sub-10269', 'sub-10271', 'sub-10273', 'sub-10274',
-#         'sub-10280', 'sub-10290', 'sub-10292', 'sub-10299', 'sub-10304',
-#         'sub-10316', 'sub-10321', 'sub-10325', 'sub-10329', 'sub-10339',
-#         'sub-10340', 'sub-10345', 'sub-10347', 'sub-10356', 'sub-10361',
-#         'sub-10365', 'sub-10376', 'sub-10377', 'sub-10388', 'sub-10429',
-#         'sub-10438', 'sub-10440']
+subject_list = [['sub-10159', 'sub-10189', 'sub-10206', 'sub-10217',
+    'sub-10225', 'sub-10227', 'sub-10228', 'sub-10235', 'sub-10249',
+    'sub-10269', 'sub-10271', 'sub-10273', 'sub-10274', 'sub-10290',
+    'sub-10292', 'sub-10304', 'sub-10316', 'sub-10321', 'sub-10325',
+    'sub-10329', 'sub-10339', 'sub-10340', 'sub-10345', 'sub-10347',
+    'sub-10356', 'sub-10361', 'sub-10365', 'sub-10376', 'sub-10377',
+    'sub-10388', 'sub-10429', 'sub-50004', 'sub-50005', 'sub-50006',
+    'sub-50007', 'sub-50008', 'sub-50010', 'sub-50013', 'sub-50014',
+    'sub-50015', 'sub-50016', 'sub-50020', 'sub-50021', 'sub-50022',
+    'sub-50023', 'sub-50025', 'sub-50027', 'sub-50029', 'sub-50032',
+    'sub-50033', 'sub-50034', 'sub-50035', 'sub-50036', 'sub-50038',
+    'sub-50060', 'sub-50061', 'sub-50064', 'sub-50066', 'sub-50067',
+    'sub-50069', 'sub-50073', 'sub-50083']]
+
 # sub_list = ['sub-10448',
 #         'sub-10455', 'sub-10460', 'sub-10471', 'sub-10478', 'sub-10487',
 #         'sub-10492', 'sub-10501', 'sub-10506', 'sub-10517', 'sub-10523',
@@ -111,14 +116,14 @@ if do_data_analysis:
     subjects_id = subject_list[0]
 
     print('performing data analysis')
-    bold_path = os.path.join(base_path, 'data_out', 'data_analysis', 'pairwise_comparison')
+    bold_path = os.path.join(base_path, 'data_out', 'ucla_la5', 'data_analysis', 'pairwise_comparison')
     # perform data_analysis with different valus for the n_cluster
     n_clusters = [25] # 15, 20, 25, 30]
     rand_inds = [15] #, 45]     # randomisation index necessary for randmio_und. The higher
                          # this parameter the more random will the generated matrix be
     n_groups = 2
-    # analysis_type = 'synchrony'
-    analysis_type = 'BOLD'
+    analysis_type = 'synchrony'
+    # analysis_type = 'BOLD'
     # analysis_type = 'graph_analysis'
     # statistics_type = 'hutchenson'
     statistics_type = 'ttest'
@@ -129,9 +134,9 @@ if do_data_analysis:
         print 'Running thread: ' + str(rand_ind) + ' ' + str(n_cluster)
         # data_analysis(subjects_id, rand_ind, n_cluster, graph_analysis=True)
         # when calling the between network comparision
-        data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True,
-                      sliding_window=True, graph_analysis=True,
-                      network_comp=network_comp)
+        # data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True,
+                      # sliding_window=True, graph_analysis=False,
+                      # network_comp=network_comp)
         group_analysis_pairwise(subjects_id, n_cluster, n_groups, bold_path,
                 rand_ind, analysis_type, statistics_type,
                 network_comp=network_comp)

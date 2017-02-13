@@ -56,24 +56,13 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
              'small_wordnesss2': [],
              'weights2': []}
 
-        g3 = {'degree_centrality_h': [],
-             'path_distance_h': [],
-             'small_wordness_h': [],
-             'weight_h': [],
-             'degree_centralitys2': [],
-             'path_distances2': [],
-             'small_wordnesss2': [],
-             'weights2': []}
-
     elif analysis_type == 'synchrony':
         g1 = {'synchrony_h': [], 's2': []}
         g2 = {'synchrony_h': [], 's2': []}
-        g3 = {'synchrony_h': [], 's2': []}
 
     elif analysis_type == 'BOLD':
         g1 = {'bold_h': [], 's2': []}
         g2 = {'bold_h': [], 's2': []}
-        g3 = {'bold_h': [], 's2': []}
 
     else:
         raise ValueError('The analysis type was passed incorrectly')
@@ -99,18 +88,14 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
        # separate subjects according to their grups.
        # g1: healthy controls
        # g2: prodromals
-       # g3: schizophrenic
-        if int(subject_id.strip('sub')) < 200:
+        if int(subject_id.strip('sub-')) < 40000:
             # iterate over all keys on the dictionary
             for key in g1:
                 g1[key].append(data[key])
-        elif int(subject_id.strip('sub')) > 300:
-            for key in g3:
-                g3[key].append(data[key])
-        else:
+        elif int(subject_id.strip('sub-')) > 50000:
             for key in g2:
                 g2[key].append(data[key])
-    groups = [g1, g2, g3]
+    groups = [g1, g2]
 
     if analysis_type == 'graph_analysis':
         # define which parameters are of interest
@@ -147,7 +132,7 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
         for key in par:
             g_temp = {'g1_%s'%(key + '_h'): g1[key + '_h'],
                       'g2_%s'%(key + '_h'): g2[key + '_h'],
-                      'g3_%s'%(key + '_h'): g3[key + '_h']}
+                      }
             g_all.update(g_temp)
         # itertools allow dictionary entries to have different sizes
         with open('gm_entropy.csv', 'wb') as outfile:
@@ -174,8 +159,7 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
                 results['s2'].append(np.mean(g_i['s2']))
 
         # save all entropy values into a csv file
-        g_all = {'g1': g1[par_interest[0]], 'g2': g2[par_interest[0]],
-                 'g3': g3[par_interest[0]]}
+        g_all = {'g1': g1[par_interest[0]], 'g2': g2[par_interest[0]]}
 
         # itertools allow dictionary entries to have different sizes
         with open('synchrony_entropy.csv', 'wb') as outfile:
@@ -202,8 +186,7 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
                 results['s2'].append(np.mean(g_i['s2']))
 
         # save all entropy values into a csv file
-        g_all = {'g1': g1[par_interest[0]], 'g2': g2[par_interest[0]],
-                 'g3': g3[par_interest[0]]}
+        g_all = {'g1': g1[par_interest[0]], 'g2': g2[par_interest[0]]}
         # itertools allow dictionary entries to have different sizes
         with open('bold_entropy.csv', 'wb') as outfile:
             writer = csv.writer(outfile)
@@ -226,48 +209,18 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
                                             results[s2_par[ii]][0],       results[s2_par[ii]][1],
                                             data['n_labels_'  + n_labels ],
                                             data['n_classes_' + n_labels])
-            t23, df23, p23 = hutcheson_test(results[par_interest[ii]][1], results[par_interest[ii]][2],
-                                            results[s2_par[ii]][1],       results[s2_par[ii]][2],
-                                            data['n_labels_'  + n_labels ],
-                                            data['n_classes_' + n_labels])
-            t13, df13, p13 = hutcheson_test(results[par_interest[ii]][0], results[par_interest[ii]][2],
-                                            results[s2_par[ii]][0],       results[s2_par[ii]][2],
-                                            data['n_labels_'  + n_labels ],
-                                            data['n_classes_' + n_labels])
 
         elif statistics_type == 'ttest':
             t12, p12 = stats.ttest_ind(g1[par_interest[ii]], g2[par_interest[ii]])
-            t23, p23 = stats.ttest_ind(g2[par_interest[ii]], g3[par_interest[ii]])
-            t13, p13 = stats.ttest_ind(g1[par_interest[ii]], g3[par_interest[ii]])
-
-        elif statistics_type == '1ANOVA':
-            # calculate one-way ANOVA for all parameters of interest
-            f, pv = stats.f_oneway(g1[par_interest[ii]], g2[par_interest[ii]],
-                                   g3[par_interest[ii]])
-            res[par_interest[ii]] = [f, pv]
-            print('p and f-value for %s') %key
-            print (pv, f)
-            if pv < significancy:
-                print('Significant difference btw HC, PD, SCH')
 
         if statistics_type == 'ttest' or statistics_type == 'hutchenson':
             # Print results
             print('num clusters: %02d' %n_cluster)
             print('p and t-value for difference between HC and PD')
             print(p12,t12)
-            # compare g2 to g3
-            print('p and t-value for difference between PD and SC')
-            print(p23,t23)
-            # compare g1 to g3
-            print('p and t-value for difference between HC and SC')
-            print(p13,t13)
 
             if p12 < significancy:
                 print('Significant difference btw HC and PD when looking at %s' %key)
-            elif p23 < significancy:
-                print('Significant difference btw PD and SCH when looking at %s' %key)
-            elif p13 < significancy:
-                print('Significant difference btw HC and SCH when looking at %s' %key)
             else:
                 print('No significant difference among groups for %s' %key)
 
@@ -277,7 +230,7 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
     #------------------------------------------------------------------------------
     print('-----------------------------------------------------------------------')
     ind = np.arange(n_groups)
-    width = 0.35
+    width = 0.7
     if analysis_type == 'graph_analysis':
         parameters = [results['degree_centrality_h'],
                       results['small_wordness_h'],
@@ -298,7 +251,7 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
         parameters_s = ['Synchrony']
         parameters_std = results['synchrony_h_std']
         print ('mean synchrony: %s') % str(results['synchrony_h']).strip('[]')
-        print ('bold std : %s') % str(results['synchrony_h_std']).strip('[]')
+        print ('synchrony std : %s') % str(results['synchrony_h_std']).strip('[]')
 
     elif analysis_type == 'BOLD':
         parameters = results['bold_h']
@@ -322,7 +275,7 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
                 alpha=0.5,      # transparency
                 align='center')
     for element in range(len(parameters_s)):
-        ax.set_xticklabels(('HC', 'PD', 'SC'))
+        ax.set_xticklabels(('HC', 'SC'))
         # set height of the y-axis
         if analysis_type == 'BOLD':
             max_y = .4
