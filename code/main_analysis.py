@@ -7,7 +7,7 @@ import subprocess
 import threading
 import shlex
 from preprocessing_workflow import preprocessing_pipeline
-# from data_analysis import data_analysis
+from data_analysis import data_analysis
 from group_analysis_pairwise import group_analysis_pairwise
 
 #------------------------------------------------------------------------------
@@ -23,6 +23,7 @@ do_data_analysis = True
 # network_comp = 'within_network'
 network_comp = 'full_network'
 fwhm = 'fwhm_5'
+# subject_list = [['sub-10429']]
 subject_list = [['sub-10159', 'sub-10189', 'sub-10206', 'sub-10217',
     'sub-10225', 'sub-10227', 'sub-10228', 'sub-10235', 'sub-10249',
     'sub-10269', 'sub-10271', 'sub-10273', 'sub-10274', 'sub-10290',
@@ -86,21 +87,19 @@ if do_preprocessing:
 if do_extract_roi:
     print('extracting ROIs')
     # File name of the final preprocessed image that will be segmented
-    preprocessed_image = 'denoised_func_data_nonaggr_filt_regfilt.nii.gz'
+    preprocessed_image = 'denoised_func_data_nonaggr_filt.nii.gz'
 
-    data_sink_path = os.path.join(base_path, 'data_out', 'preprocessing_out')
-    output_path = os.path.join(base_path, 'data_out', 'preprocessing_out', 'extract_vois')
+    data_sink_path = os.path.join(base_path, 'data_out', 'ucla_la5', 'preprocessing_out')
+    output_path = os.path.join(base_path, 'data_out', 'ucla_la5', 'preprocessing_out', 'extract_vois')
 
     # Define path to the image that will be used as a segmentation mask and load
     segmented_image_path = os.path.join(base_path, 'data_in', 'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
-    segmented_regions_path = os.path.join(base_path, 'data_in', 'voi_extraction',
-            'LookupTable')
+    segmented_regions_path = os.path.join(base_path, 'data_in', 'voi_extraction', 'LookupTable')
     segmented_regions = np.genfromtxt(segmented_regions_path, dtype = [('numbers',
         '<i8'), ('regions', 'S31'), ('labels', 'i4')], delimiter=',')
 
     # Path to image where the different networks are specified
-    network_path = os.path.join(base_path, 'data_in', 'voi_extraction',
-                   'PNAS_Smith09_rsn10.nii')
+    network_path = os.path.join(base_path, 'data_in', 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
     # get subjects_id from a list of lists in subject_list
     subjects_id = subject_list[0]
     # Extract ROIs
@@ -134,9 +133,9 @@ if do_data_analysis:
         print 'Running thread: ' + str(rand_ind) + ' ' + str(n_cluster)
         # data_analysis(subjects_id, rand_ind, n_cluster, graph_analysis=True)
         # when calling the between network comparision
-        # data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True,
-                      # sliding_window=True, graph_analysis=False,
-                      # network_comp=network_comp)
+        data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True,
+                       sliding_window=True, graph_analysis=False,
+                       network_comp=network_comp, n_network=9)
         group_analysis_pairwise(subjects_id, n_cluster, n_groups, bold_path,
                 rand_ind, analysis_type, statistics_type,
                 network_comp=network_comp)
