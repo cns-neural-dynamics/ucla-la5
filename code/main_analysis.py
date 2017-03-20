@@ -20,8 +20,8 @@ do_data_analysis = True
 # of a predefined network  (within_network) or among different networks
 # (between_networks - you will end up with a 10x10 matrix)
 # network_comp = 'between_network'
-# network_comp = 'within_network'
-network_comp = 'full_network'
+network_comp = 'within_network'
+# network_comp = 'full_network'
 fwhm = 'fwhm_5'
 # subject_list = [['sub-10429']]
 subject_list = [['sub-10159', 'sub-10189', 'sub-10206', 'sub-10217',

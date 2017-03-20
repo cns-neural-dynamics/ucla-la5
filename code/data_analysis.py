@@ -470,17 +470,34 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
         elif network_comp == 'within_network':
             data = {}
             # for network in
-            data_path = os.path.join(in_dir, subject_id, '')
+            for network in range(10):
+                data_path = os.path.join(in_dir, subject_id, 'within_network_%d.txt' %network)
+                tmp_data = np.genfromtxt(data_path)
+                data[str(network)] = tmp_data
         else:
             data_path = os.path.join(in_dir, subject_id, '%s.txt'
                                      % subject_id)
             data = np.genfromtxt(data_path)
-        # The first number corresponds to the number of regions in the dataset
-        # used for the segmentation
-        n_regions = data.shape[0]
 
-        # Perform hilbert transform
-        hiltrans = hilbert_tranform(data)
+        # check if data is a dictionary. Data will a dictionary in the within network analysis, where each
+        # entry on the dictionary represent data from a specific network. If the data is a dictioray perform
+        # the analysis for each network separatly, otherwise perform analysis just once.
+        # todo: just as a prove of concept I am using the 5th network to test if this approach wuold work.
+        # In case it does you still have to generalise for all 10 networks.
+        if isinstance(data, dict):
+            #for n_network in range(n_regions):
+                # Perform hilbert transform for within and full network
+            hiltrans = hilbert_tranform(data['5'])
+        else:
+            hiltrans = hilbert_tranform(data)
+
+        # n_regions corresponds to the number of regions in the dataset. In the case of the full-
+        # network there are 82, for the within network this number varies according to the current
+        # network under analysis.
+        # used for the segmentation
+        # todo: check if this still works with len or if need to revert back to .shape
+        n_regions = hiltrans.shape[0]
+
         if sliding_window:
             hiltrans_sliding_window = np.zeros((n_regions, (hiltrans.shape[1] -
                                                             window_size + 1)), dtype=complex)
@@ -524,8 +541,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
 
         # Calculate data synchrony following Hellyer-2015_Cognitive
         if pairwise:
-            # Find length of time points after Hilbert Transform and/or sliding
-            # window
+            # Find length of time points after Hilbert Transform and/or sliding window
             if sliding_window:
                 hilbert_t_points = hiltrans_sliding_window.shape[1]
                 # overwrite hiltrans with the data obtained with the sliding window
@@ -712,7 +728,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                             # argument for the K-means
                             Ds_flat[str(t)] = np.ndarray.flatten(Ds[str(t)])
 
-                    # Save picke with graph measurements for each subject
+                    # Save pickle with graph measurements for each subject
                     graph_measures = {'weight': weight,
                                       'small_wordness': SM,
                                       'degree_centrality': degree_centrality,
