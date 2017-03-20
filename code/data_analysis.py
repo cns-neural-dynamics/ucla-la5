@@ -236,7 +236,7 @@ def mirror_array(array):
     """ Mirror results obtained on the lower diagonal to the Upper diagonal """
     return array + np.transpose(array) - np.diag(array.diagonal())
 
-def calculate_optimal_k(mean_synchrony, indices, n_regions=82, k_lower=0.1, k_upper=1.0, k_step=0.01):
+def calculate_optimal_k(mean_synchrony, indices, k_lower=0.1, k_upper=1.0, k_step=0.01):
     """ Iterate over different threshold (k) to find the optimal value to use a
     threshold. This function finds the optimal threshold that allows the
     trade-off between cost and efficiency to be minimal.
@@ -247,6 +247,9 @@ def calculate_optimal_k(mean_synchrony, indices, n_regions=82, k_lower=0.1, k_up
     The here implemented approach was based on Bassett-2009Cognitive
 
     """
+    # obtain the number of regions according to the passed dataset
+    n_regions = mean_synchrony.shape[0]
+
     EC_optima = 0  # cost-efficiency
     k_optima = 0  # threshold
     for k in np.arange(k_lower, k_upper, k_step):
