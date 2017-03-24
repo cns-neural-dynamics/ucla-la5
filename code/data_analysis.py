@@ -428,6 +428,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
     phi = np.zeros((hilbert_t_points), dtype=complex)
     idx = 0
 
+    hc_subjects_id = []
     # Iterate over the list of subjects and calculate the pairwise and global
     # metastability and synchrony.
     for subject_id in subjects_id:
@@ -573,6 +574,15 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                                                      '%s'
                                                      % subject_id, 'synchrony', 'synchrony.pickle'), 'wb'))
 
+            pickle.dump(mean_synchrony, open(os.path.join(out_dir,
+                                                     'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
+                                                     '%s'
+                                                     % subject_id, 'synchrony', 'mean_synchrony.pickle'), 'wb'))
+
+            # from the list of subjects get only healthy subjects (coding starts with 1000). This list
+            # will be used to get the optimal thresholding value only from healthy subjects
+            if int(subject_id.strip('sub-')) < 40000:
+                hc_subjects_id.append(subject_id)
             # plot synchrony matrix for each time point
             # TODO: to speed up performace a bit you could implement this method:
             # http://stackoverflow.com/questions/16334588/create-a-figure-that-is-reference-counted/16337909#16337909
@@ -591,14 +601,34 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             # ---------------------------------------------------------------------
             # Calculate optimal threshold that optimises the cost-efficiency of
             # the current network..
-            k_optima = calculate_optimal_k(mean_synchrony, indices)
-            print ('Optimal mean threshold: %3f' % k_optima)
 
+    if pairwise:
+        k_hc_optima = []
+        # calculate optimal thresold on healthy subjects only
+        for hc_subject in hc_subjects_id:
+            # load subjects mean_synchrony
+            path_mean_synchrony = os.path.join(out_dir, 'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
+                         '%s' % hc_subject, 'synchrony', 'mean_synchrony.pickle')
+            mean_synchrony = pickle.load(open(path_mean_synchrony, 'rb'))
+            temp_k_optima = calculate_optimal_k(mean_synchrony, indices)
+            k_hc_optima.append(temp_k_optima)
+
+        # find optimal mean of healthy subjects
+        k_optima = np.mean(k_hc_optima)
+
+        print ('Optimal mean threshold: %3f' % k_optima)
+
+        for subject_id in subjects_id:
             # Threshold the synchrony matrix at each time point using the just found optimal
             # threshold and save the output
             synchrony_bin = np.zeros((n_regions, n_regions, hilbert_t_points))
             # fig = plt.figure()
             for t in range(hilbert_t_points):
+                # load subject's synchrony
+                path_synchrony = os.path.join(out_dir, 'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
+                                                   '%s' % subject_id, 'synchrony', 'synchrony.pickle')
+                synchrony = pickle.load(open(path_synchrony, 'rb'))
+
                 for index in indices:
                     if synchrony[index[0], index[1], t] >= k_optima:
                         synchrony_bin[index[0], index[1], t] = 1
@@ -810,25 +840,25 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
 
             print('Done!')
             print ('--------------------------------------------------------------')
-        else:
-            # iterate over all analysed regions
-            for voi in range(n_regions):
-                phi += np.exp(np.angle(hiltrans[voi, :]) * 1j)
-            # normalise over the number of regions
-            phi *= float(1) / n_regions
-            pickle.dump(phi, open(os.path.join(out_dir,
-                                               'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
-                                               '%s' % subject_id, '%02d_clusters' % n_cluster,
-                                               'synchrony_data_%s.pickle' % (subject_id)), 'wb'))
+    else:
+        # iterate over all analysed regions
+        for voi in range(n_regions):
+            phi += np.exp(np.angle(hiltrans[voi, :]) * 1j)
+        # normalise over the number of regions
+        phi *= float(1) / n_regions
+        pickle.dump(phi, open(os.path.join(out_dir,
+                                           'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
+                                           '%s' % subject_id, '%02d_clusters' % n_cluster,
+                                           'synchrony_data_%s.pickle' % (subject_id)), 'wb'))
 
-            # Reshuffle data so that it can be saved
-            all_phi[idx, 0] = int(subject_id.strip('sub'))
-            all_phi[idx, 1] = np.mean(abs(phi))
-            all_phi[idx, 2] = np.std(abs(phi))
-            idx += 1
+        # Reshuffle data so that it can be saved
+        all_phi[idx, 0] = int(subject_id.strip('sub'))
+        all_phi[idx, 1] = np.mean(abs(phi))
+        all_phi[idx, 2] = np.std(abs(phi))
+        idx += 1
 
-            np.savetxt(os.path.join(out_dir, 'global_comparison', 'synchrony_and_metastability.txt'), all_phi,
-                       fmt='%3d %1.4f %1.4f', delimiter=' ', header='subject_id, mean synchrony, metastability')
+        np.savetxt(os.path.join(out_dir, 'global_comparison', 'synchrony_and_metastability.txt'), all_phi,
+                   fmt='%3d %1.4f %1.4f', delimiter=' ', header='subject_id, mean synchrony, metastability')
 
 # if __name__ == "__main__":
 #     parser = argparse.ArgumentParser()
