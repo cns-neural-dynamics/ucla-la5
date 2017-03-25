@@ -20,7 +20,7 @@ import pdb
 
 
 def extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
-                segmented_image_path, segmented_regions, output_path, network=False,
+                segmented_image_path, segmented_regions_filename, output_path, network=False,
                 network_path=None, network_comp=None):
     """
     Iterate over all subjects and all regions (specified by the segmented_image).
@@ -46,6 +46,14 @@ def extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
          - network_comp  : Allow for comparison between networks and inside
                            networks
      """
+
+    # Load segemented regions list from input file.
+    # FIXME: This should go inside extract_roi.
+    segmented_regions = np.genfromtxt(segmented_regions_filename,
+        dtype = [('numbers', '<i8'), ('regions', 'S31'), ('labels', 'i4')],
+        delimiter=','
+    )
+
     # Load segmented image and obtain data from the image
     segmented_image = nib.load(segmented_image_path)
     # Load the segmented image data from the nii file
