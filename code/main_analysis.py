@@ -1,11 +1,6 @@
 #!/share/apps/anaconda/bin/python
-import nibabel as nib
-import numpy as np
-import os
 from data_analysis import *
-import subprocess
 import threading
-import shlex
 from preprocessing_workflow import preprocessing_pipeline
 from data_analysis import data_analysis
 from group_analysis_pairwise import group_analysis_pairwise

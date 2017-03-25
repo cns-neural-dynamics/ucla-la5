@@ -1,16 +1,14 @@
 #!/share/apps/anaconda/bin/python
 import os
-import sys
 from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth, BET
 from nipype.interfaces.freesurfer import BBRegister, MRIConvert
 from nipype.interfaces.ants import Registration, ApplyTransforms
 from nipype.interfaces.c3 import C3dAffineTool
 from nipype.interfaces.utility import Merge
 from nipype.pipeline.engine import Workflow, Node, MapNode
-from nipype.interfaces.io import SelectFiles, DataSink, FreeSurferSource, DataGrabber
+from nipype.interfaces.io import DataSink, FreeSurferSource, DataGrabber
 from nipype.interfaces.utility import IdentityInterface, Function
 from nipypext import nipype_wrapper
-import argparse
 
 def preprocessing_pipeline(subjects_list):
     def get_file(in_file):
