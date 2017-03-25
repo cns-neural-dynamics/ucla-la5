@@ -160,21 +160,6 @@ def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mas
     return netw, net_filter
 
 
-def min_max_scalling(data):
-    """Return matrix scaled by its maximum and minimum."""
-    min_d = data.min()
-    max_d = data.max()
-    for row in range(data.shape[0]):
-        for column in range(data.shape[1]):
-            for volume in range(data.shape[2]):
-                if data[row, column, volume] == 0:
-                    continue
-                else:
-                    data[row, column, volume] = \
-                        float(data[row, column, volume] - min_d) / (max_d - min_d)
-    return data
-
-
 def hilbert_tranform(data, TR=2, upper_bound=0.07, lower_bound=0.04):
     """ Perform Hilbert Transform on given data. This allows extraction of phase
      information of the empirical data"""
