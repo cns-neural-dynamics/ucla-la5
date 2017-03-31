@@ -19,9 +19,13 @@ import progressbar
 import pdb
 
 
-def extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
-                segmented_image_path, segmented_regions_filename, output_path, network=False,
-                network_path=None, network_comp=None):
+def extract_roi(subjects,
+                network_type,
+                input_basepath,
+                segmented_image_filename,
+                segmented_regions_filename,
+                output_basepath,
+                network_mask_filename=None):
     """
     Iterate over all subjects and all regions (specified by the segmented_image).
      For each region find the correspoding BOLD signal. To reduce the
@@ -32,13 +36,13 @@ def extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
      Inputs:
          - subjects_id   : List of subjects id
          - fwhm          : used fwhm
-         - data_sink_path: Path to datasink
+         - input_basepath: Path to datasink
          - preprocessed_image: name of the preprocessed file that will be
                                segmented
-         - segmented_image_path : Path to the image that will be used to segment
+         - segmented_image_filename : Path to the image that will be used to segment
          - segmented_regions: List of regions that will be used for the
            segmentation
-         - output_path   : Path where the BOLD signal will be saved
+         - output_basepath   : Path where the BOLD signal will be saved
          - newtork       : Define if segmented regions should be further
                            combined into networks
          - network_path  : Path to the image where the different networks are
@@ -47,99 +51,103 @@ def extract_roi(subjects_id, fwhm, data_sink_path, preprocessed_image,
                            networks
      """
 
-    # Load segemented regions list from input file.
-    # FIXME: This should go inside extract_roi.
+    # Only full_network does not require a network mask.
+    if network_type != 'full_network' and network_mask_filename is None:
+        raise ValueError('The %s network type requires a network mask.' %
+                         (network_type))
+
+    # Load the segmented regions list.
     segmented_regions = np.genfromtxt(segmented_regions_filename,
         dtype = [('numbers', '<i8'), ('regions', 'S31'), ('labels', 'i4')],
         delimiter=','
     )
 
-    # Load segmented image and obtain data from the image
-    segmented_image = nib.load(segmented_image_path)
-    # Load the segmented image data from the nii file
+    # Load the segmented image.
+    segmented_image = nib.load(segmented_image_filename)
     segmented_image_data = segmented_image.get_data()
 
-    for subject_id in subjects_id:
-        print 'Analysing Subject: %s' % subject_id
-        image_path = os.path.join(data_sink_path, 'final_image', subject_id,
-                                  preprocessed_image)
-        # Load subjects preprocessed image and extract data from the image
-        image = nib.load(image_path)
-        image_data = image.get_data()
-        # Obtain different time points (corresponding to the image TR)
-        time = image_data.shape[3]
-        # Initialise matrix where the averaged BOLD signal for each region will be
-        # saved
-        avg = np.zeros((segmented_regions['labels'].shape[0], time))
-        # Find the voxels on the subject's image that correspond to the voxels on
-        # the labeled image for each time point and calculate the mean BOLD response
-        # Combine the diffferent segmented regions into pre-specified networks
-        pbar = progressbar.ProgressBar(widgets=[progressbar.Percentage(),
-                                                progressbar.Bar()], maxval=len(segmented_regions)).start()
-        if network:
-            # Load the network maks
-            ntw_img = nib.load(network_path)
-            ntw_data = ntw_img.get_data()
-            boolean_ntw = ntw_data > 1.64
-        # Dictionary where the regions belonging for each network will be saved
-        netw = {key: [] for key in range(ntw_data.shape[3])}
-        net_filter = np.zeros(ntw_data.shape)
-        for region in range(len(segmented_regions)):
-            pbar.update(region)
-            label = segmented_regions['labels'][region]
-            boolean_mask = segmented_image_data == label
+    # Extract ROI for each subjects.
+    preprocessed_image_filename = 'denoised_func_data_nonaggr_filt.nii.gz'
+    for subject in subjects:
+        print 'Analysing subject: %s.' % subject
 
-            # find the most likely network to which each a specific region belongs to.
-            # Regions can belong to multiple networks. net_filter will be updated
-            # until every region belongs to at least one network.
-            if network:
-                netw, net_filter = most_likely_roi_network(netw, ntw_data,
-                                                           net_filter, boolean_ntw, boolean_mask, region)
-            else:
-                for t in range(time):
+        # Generate the output folder.
+        subject_path = os.path.join(output_basepath, subject)
+        if not os.path.exists(subject_path):
+            os.makedirs(subject_path)
+
+        # Load the subject input image.
+        image_filename = os.path.join(input_basepath, 'final_image', subject,
+                                      preprocessed_image_filename)
+        image = nib.load(image_filename)
+        image_data = image.get_data()
+        ntpoints = image_data.shape[3]
+
+        if network_type == 'full_network':
+            # Calculate the average BOLD signal over all regions.
+            avg = np.zeros((segmented_regions['labels'].shape[0], ntpoints))
+            for region in range(len(segmented_regions)):
+                label = segmented_regions['labels'][region]
+                boolean_mask = np.where(segmented_image_data == label)
+                for t in range(ntpoints):
                     data = image_data[:, :, :, t]
-                    boolean_mask = np.where(segmented_image_data == label)
                     data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
-                    # for all regions calculate the mean BOLD at each time point
                     avg[region, t] = data.mean()
 
-        pbar.finish()
-        # obtain BOLD data
-        if network_comp == 'within_network':
-            # calculate the bold for each region inside a specific
-            # network
-            for network in netw:
-                avg_bold = np.zeros((len(netw[network]), time))
-                for region in range(len(netw[network])):
-                    label = segmented_regions['labels'][netw[network][region]]
-                    #                    boolean_mask = segmented_image_data == label
-                    boolean_mask = np.where(segmented_image_data == label)
-                    for t in range(time):
+            # Dump the results.
+            np.savetxt(os.path.join(subject_path, 'full_network.txt'),
+                       avg, delimiter=' ', fmt='%5e')
+        else:
+            # Load the network mask.
+            ntw_image = nib.load(network_mask_filename)
+            ntw_data = ntw_image.get_data()
+            boolean_ntw = ntw_data > 1.64
+
+            # Find the most likely regions inside the network.
+            networks = {key: [] for key in range(ntw_data.shape[3])}
+            ntw_filter = np.zeros(ntw_data.shape)
+            for region in range(len(segmented_regions)):
+                label = segmented_regions['labels'][region]
+                boolean_mask = segmented_image_data == label
+                networks, ntw_filter = most_likely_roi_network(networks,
+                                                               ntw_data,
+                                                               ntw_filter,
+                                                               boolean_ntw,
+                                                               boolean_mask,
+                                                               region)
+
+            if network_type == 'within_network':
+                # Calculate the BOLD signal for the selected regions in the
+                # network. The labels from the original segmentation will be used
+                # to identify the regions of interest
+                for network in networks:
+                    avg = np.zeros((len(networks[network]), ntpoints))
+                    for region in range(len(networks[network])):
+                        label = segmented_regions['labels'][networks[network][region]]
+                        boolean_mask = np.where(segmented_image_data == label)
+                        for t in range(ntpoints):
+                            data = image_data[:, :, :, t]
+                            data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
+                            avg[region, t] = data.mean()
+                    np.savetxt(os.path.join(subject_path,
+                                            'within_network_%d.txt' % network),
+                               avg, delimiter=' ', fmt='%5e')
+            elif network_type == 'between_network':
+                # Calculate the BOLD signal across the selected networks. This procedure is similar to the full
+                # network approach, however, the BOLD activity of all regions enclosed in one network is taken
+                # into account.
+                avg = np.zeros((ntw_data.shape[3], ntpoints))
+                for network in range(ntw_data.shape[3]):
+                    boolean_mask = np.where(ntw_filter[:, :, :, network] > 0)
+                    for t in range(ntpoints):
                         data = image_data[:, :, :, t]
                         data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
-                        avg_bold[region, t] = data.mean()
-                np.savetxt(os.path.join(output_path, subject_id,
-                                        'within_network_%d.txt' % network), avg_bold, delimiter=' ', fmt='%5e')
-                # save avg_bold
-        elif network_comp == 'between_network':
-            ntw_avg = np.zeros((ntw_data.shape[3], time))
-            # calculate the main bold across networks
-            for t in range(time):
-                data = image_data[:, :, :, t]
-                for network in range(ntw_data.shape[3]):
-                    boolean_filtered_data = np.where(net_filter[:, :, :, network] > 0)
-                    data_filtered = data[boolean_filtered_data[0],
-                                         boolean_filtered_data[1],
-                                         boolean_filtered_data[2]]
-                    ntw_avg[network, t] = data_filtered.mean()
-            # save netw_avg
-            np.savetxt(os.path.join(output_path, subject_id, 'between_network.txt'), ntw_avg, delimiter=' ', fmt='%5e')
-        elif network_comp == 'full_network':
-            # save data into a text file
-            np.savetxt(os.path.join(output_path, subject_id,
-                                    '%s.txt' % subject_id), avg, delimiter=' ', fmt='%5e')
-
-        print 'Subject %s: Done!' % subject_id
+                        avg[network, t] = data.mean()
+                np.savetxt(os.path.join(subject_path,
+                                        'between_network.txt'),
+                           avg, delimiter=' ', fmt='%5e')
+            else:
+                raise ValueError('Unrecognised network type: %s.' % (network_type))
 
 
 def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mask, region):
@@ -160,7 +168,7 @@ def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mas
     return netw, net_filter
 
 
-def hilbert_tranform(data, TR=2, upper_bound=0.07, lower_bound=0.04):
+def compute_hilbert_tranform(data, TR=2, upper_bound=0.07, lower_bound=0.04):
     """ Perform Hilbert Transform on given data. This allows extraction of phase
      information of the empirical data"""
     # Initialise TimeSeries object
@@ -191,7 +199,27 @@ def slice_window_avg(array, window_size):
     # 'valid').
 
 
-def calculate_phi(indices, n_regions, hilbert_t_points, hiltrans):
+def apply_sliding_window(hilbert_transform, window_size):
+    nregions = hilbert_transform.shape[0]
+    ntpoints = hilbert_transform.shape[1]
+    slided = np.zeros((nregions, ntpoints - window_size + 1), dtype=complex)
+    for roi in range(nregions):
+        slided[roi, :] = slice_window_avg(hilbert_transform[roi, :],
+                                          window_size)
+    return slided
+
+
+def calculate_phi(hiltrans):
+    n_regions = hiltrans.shape[0]
+    hilbert_t_points = hiltrans.shape[1]
+
+    # Find indices of regions for pairwise comparison and reshuffle them
+    # to obtain a tuple for each pairwise comparison.
+    # As the comparision is symmetric computation power can be saved by
+    # calculating only the lower diagonal matrix.
+    indices = np.tril_indices(n_regions)
+    indices = zip(indices[0], indices[1])
+
     phi = np.zeros((n_regions, n_regions, hilbert_t_points), dtype=complex)
     pair_synchrony = np.zeros((n_regions, n_regions))
     pair_metastability = np.zeros((n_regions, n_regions))
@@ -218,16 +246,16 @@ def calculate_phi(indices, n_regions, hilbert_t_points, hiltrans):
         synchrony[:, :, time_p] = mirror_array(synchrony[:, :, time_p])
     pair_synchrony = mirror_array(pair_synchrony)
     pair_metastability = mirror_array(pair_metastability)
-    # TODO: double check if that is the best place for it
-    # calculate global synchrony without the main diagonal.
     global_synchrony = np.mean(np.tril(pair_synchrony), -1)
     global_metastability = np.std(global_synchrony)
-    return synchrony, pair_synchrony, pair_metastability
+    return synchrony, pair_synchrony, pair_metastability, \
+           global_synchrony, global_metastability
 
 
 def mirror_array(array):
     """ Mirror results obtained on the lower diagonal to the Upper diagonal """
     return array + np.transpose(array) - np.diag(array.diagonal())
+
 
 def calculate_optimal_k(mean_synchrony, indices, k_lower=0.1, k_upper=1.0, k_step=0.01):
     """ Iterate over different threshold (k) to find the optimal value to use a
@@ -378,12 +406,40 @@ def bold_plot_threshold(data, n_regions, threshold=1.3):
     return thr_data
 
 
-# -------------------------------------------------------------------------------------------------
-#                                           Settings
-# -------------------------------------------------------------------------------------------------
-def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True,
-                  sliding_window=True, graph_analysis=True, window_size=20,
-                  n_time_points=184, network_comp='between_network', n_network=9):
+def data_analysis_subject_basepath(basepath,
+                                   network_type,
+                                   window_type,
+                                   subject):
+    return os.path.join(basepath, network_type, window_type, subject)
+
+
+def data_analysis_full_path(basepath,
+                            network_type,
+                            window_type,
+                            subject,
+                            data_analysis_type,
+                            nclusters,
+                            rand_ind):
+    return os.path.join(data_analysis_subject_basepath(basepath,
+                                                       network_type,
+                                                       window_type,
+                                                       subject),
+                        data_analysis_type, 'nclusters_' + str(nclusters),
+                        'rand_ind_' + str(rand_ind))
+
+
+def data_analysis(subjects,
+                  input_basepath,
+                  output_basepath,
+                  network_type,
+                  window_type,
+                  data_analysis_type,
+                  nclusters,
+                  rand_ind,
+                  graph_analysis=True, # FIXME
+                  window_size=20, # FIXME
+                  n_time_points=184,
+                  nnetworks=10): # FIXME remove default nnetworks
     ''' Compute the main analysis. This function calculates the synchrony,
     metastability and perform the graph analysis.
 
@@ -393,9 +449,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                           matrix
         - analysis_type:  Define type of analysis to be performed. Possbile
                           inputs: synchrony or BOLD.
-        - n_cluster:      Number of clusters used for k-means
-        - pairwise:       Binary input. Is a pairwise comparison going to be
-                          performed?
+        - nclusters:      Number of clusters used for k-means
         - sliding_window: Sliding window used to reduce noise of the time serie
         - graph_analysis: Defines if graph_analysis will be performed or not
         - window_size:    Defined size of the sliding window
@@ -410,84 +464,82 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                           within network comparison)
     '''
 
-    hilbert_t_points = n_time_points - window_size
-    base_path = os.path.join(os.sep, 'scratch', 'jdafflon', 'personal', 'data_out', 'ucla_la5')
-    in_dir = os.path.join(base_path, 'preprocessing_out', 'extract_vois')
-    out_dir = os.path.join(base_path, 'data_analysis')
+    # Compute synchrony, metastability and mean synchrony for each subject, both
+    # globally and pairwise.
+    for subject in subjects:
+        # Calculate Hilbert transform for the network(s).
+        # Import ROI data for each VOI.
+        # The actual data depends on the network type.
+        hilbert_transforms = {}
+        if network_type == 'between_network':
+            data_path = os.path.join(input_basepath, subject, 'between_network.txt')
+            data = np.genfromtxt(data_path)
+            hilbert_transforms[0] = compute_hilbert_tranform(data)
+        elif network_type == 'within_network':
+            for network in range(nnetworks):
+                data_path = os.path.join(input_basepath, subject, 'within_network_%d.txt' % network)
+                data = np.genfromtxt(data_path)
+                hilbert_transforms[network] = compute_hilbert_tranform(data)
+        elif network_type == 'full_network':
+            data_path = os.path.join(input_basepath, subject, '%s.txt' % subject)
+            data = np.genfromtxt(data_path)
+            hilbert_transforms[0] = compute_hilbert_tranform(data)
+        else:
+            raise ValueError('Unrecognised network type: %s' % (network_type))
 
+        # Calculate data synchrony following Hellyer-2015_Cognitive.
+        dynamic_measures = {}
+        for network in hilbert_transforms:
+            # Apply sliding windowing if required.
+            hilbert_transform = hilbert_transforms[network]
+            if window_type == 'sliding':
+                hilbert_transform = apply_sliding_window(hilbert_transform,
+                                                         window_size)
+
+            # Calculate synchrony, metastability and mean synchrony.
+            synchrony, \
+            mean_synchrony, \
+            metastability, \
+            global_synchrony, \
+            global_metastability = calculate_phi(hilbert_transform)
+
+            # Save the results for later dump.
+            dynamic_measures[network] = {
+                'synchrony': synchrony,
+                'metastability': metastability,
+                'mean_synchrony': mean_synchrony,
+                'global_synchrony': global_synchrony,
+                'global_metastability': global_metastability
+            }
+
+        # Dump results for all networks, for this subject, into a pickle file.
+        subject_path = data_analysis_subject_basepath(output_basepath,
+                                                      network_type, window_type,
+                                                      subject)
+        if not os.path.exists(subject_path):
+            os.makedirs(subject_path)
+        pickle.dump(dynamic_measures,
+                    open(os.path.join(subject_path, 'dynamic_measures.pickle'),
+                         'wb'))
+
+    # TODO:
+    # 1. Compute sincrony, metastability, etc. and save them to a pickle file.
+    #    This needs to be done in all configurations anyway, but their actual
+    #    value depends on the network_type.
+    # 2. Think about early return.
+
+    # FIXME: Move away
     # Initialise matrices for average comparision between regions and index
     # counter
-    all_phi = np.zeros((len(subjects_id), 3))
+    hilbert_t_points = n_time_points - window_size
+    all_phi = np.zeros((len(subjects), 3))
     phi = np.zeros((hilbert_t_points), dtype=complex)
     idx = 0
 
     hc_subjects_id = []
     # Iterate over the list of subjects and calculate the pairwise and global
     # metastability and synchrony.
-    for subject_id in subjects_id:
-        # check if graph theory metrics for this subject exists already in case
-        # yes, go to next subject
-        if graph_analysis:
-            print os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                               'rand_ind_%02d' % rand_ind, '%s' % subject_id, '%02d_clusters'
-                               % n_cluster, 'graph_measures_labels_shannon_%s.pickle'
-                               % subject_id)
-            if os.path.isfile(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                           'rand_ind_%02d' % rand_ind, '%s' % subject_id, '%02d_clusters'
-                                                   % n_cluster,
-                                           'graph_measures_labels_shannon_%s.pickle' % subject_id)):
-                print('Subject %s with randomisation index %02d and cluster %02d already exists' % (
-                subject_id, rand_ind, n_cluster))
-                continue
-        print(' Calculating graph measures for subject: %s' % subject_id)
-        # Check if output folder exists, if it does not then create it
-        if not os.path.isdir(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                          'rand_ind_%02d' % rand_ind, '%s' % subject_id, 'metastability')):
-            os.makedirs(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                     'rand_ind_%02d' % rand_ind, '%s' % subject_id, 'metastability'))
-
-        if not os.path.isdir(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                          'rand_ind_%02d' % rand_ind, '%s' % subject_id, 'synchrony')):
-            os.makedirs(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                     'rand_ind_%02d' % rand_ind, '%s' % subject_id, 'synchrony'))
-
-        if not os.path.isdir(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                          'rand_ind_%02d' % rand_ind, '%s' % subject_id, 'threshold_matrix')):
-            os.makedirs(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                     'rand_ind_%02d' % rand_ind, '%s' % subject_id, 'threshold_matrix'))
-
-        if not os.path.isdir(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                          'rand_ind_%02d' % rand_ind, '%s' % subject_id, '%02d_clusters' % n_cluster)):
-            os.makedirs(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                     'rand_ind_%02d' % rand_ind, '%s' % subject_id, '%02d_clusters' % n_cluster))
-        # Import BOLD signal for each VOI
-        if network_comp == 'between_network':
-            data_path = os.path.join(in_dir, subject_id, 'between_network.txt')
-            data = np.genfromtxt(data_path)
-        elif network_comp == 'within_network':
-            data = {}
-            # for network in
-            for network in range(10):
-                data_path = os.path.join(in_dir, subject_id, 'within_network_%d.txt' %network)
-                tmp_data = np.genfromtxt(data_path)
-                data[str(network)] = tmp_data
-        else:
-            data_path = os.path.join(in_dir, subject_id, '%s.txt'
-                                     % subject_id)
-            data = np.genfromtxt(data_path)
-
-        # check if data is a dictionary. Data will a dictionary in the within network analysis, where each
-        # entry on the dictionary represent data from a specific network. If the data is a dictioray perform
-        # the analysis for each network separatly, otherwise perform analysis just once.
-        # todo: just as a prove of concept I am using the 5th network to test if this approach wuold work.
-        # In case it does you still have to generalise for all 10 networks.
-        if isinstance(data, dict):
-            #for n_network in range(n_regions):
-                # Perform hilbert transform for within and full network
-            hiltrans = hilbert_tranform(data['5'])
-        else:
-            hiltrans = hilbert_tranform(data)
-
+    for subject in subjects:
         # n_regions corresponds to the number of regions in the dataset. In the case of the full-
         # network there are 82, for the within network this number varies according to the current
         # network under analysis.
@@ -508,20 +560,20 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
         # in this way assigned to a cluster. After this, the function will be
         # calculated for the next subjct, as this analysis does not need to be
         # calculated for each pair of region.
-        if analysis_type == 'BOLD':
+        if data_analysis_type == 'BOLD':
             thr_data = bold_plot_threshold(data, n_regions, threshold=1.3)
             # Save thresholded image of BOLD
             fig = plt.figure()
             plt.imshow(thr_data, interpolation='nearest')
-            fig.savefig(os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                     'rand_ind_%02d' % rand_ind, '%s' % subject_id,
-                                     'threshold_matrix', '%s_BOLD.png' % (subject_id)))
+            fig.savefig(os.path.join(output_basepath, grouping_type, network_type,
+                                     'rand_ind_%02d' % rand_ind, '%s' % subject,
+                                     'threshold_matrix', '%s_BOLD.png' % (subject)))
             plt.clf()
             plt.close()
 
             # Perfom k-means on the BOLD signal
             bold_shanon_entropy = {}
-            kmeans_bold = KMeans(n_clusters=n_cluster)
+            kmeans_bold = KMeans(n_clusters=nclusters)
             kmeans_bold.fit_transform(np.transpose(thr_data))
             kmeans_bold_labels = kmeans_bold.labels_
             pdb.set_trace()
@@ -529,15 +581,15 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             bold_shanon_entropy['bold_h'], bold_shanon_entropy['s2'], \
             bold_shanon_entropy['n_labels_bold'], \
             bold_shanon_entropy['n_classes_bold'] = shanon_entropy(kmeans_bold_labels)
-            pickle.dump(bold_shanon_entropy, open(os.path.join(out_dir,
-                                                               'pairwise_comparison', network_comp,
+            pickle.dump(bold_shanon_entropy, open(os.path.join(output_basepath,
+                                                               grouping_type, network_type,
                                                                'rand_ind_%02d' % rand_ind,
-                                                               '%s' % subject_id, '%02d_clusters' % n_cluster,
-                                                               'bold_shannon_%s.pickle' % (subject_id)), 'wb'))
+                                                               '%s' % subject, '%02d_clusters' % nclusters,
+                                                               'bold_shannon_%s.pickle' % (subject)), 'wb'))
             continue
 
         # Calculate data synchrony following Hellyer-2015_Cognitive
-        if pairwise:
+        if grouping_type == 'pairwise':
             # Find length of time points after Hilbert Transform and/or sliding window
             if sliding_window:
                 hilbert_t_points = hiltrans_sliding_window.shape[1]
@@ -556,26 +608,26 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             # Calculate phi, metastability, synchrony and mean synchrony  for the specified indices
             synchrony, mean_synchrony, metastability = calculate_phi(indices, n_regions, hilbert_t_points, hiltrans)
             # save values for metastability
-            pickle.dump(metastability, open(os.path.join(out_dir,
-                                                         'pairwise_comparison', network_comp,
+            pickle.dump(metastability, open(os.path.join(output_basepath,
+                                                         grouping_type, network_type,
                                                          'rand_ind_%02d' % rand_ind, '%s'
-                                                         % subject_id, 'metastability', 'mean_metastability.pickle'),
+                                                         % subject, 'metastability', 'mean_metastability.pickle'),
                                             'wb'))
 
-            pickle.dump(synchrony, open(os.path.join(out_dir,
-                                                     'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
+            pickle.dump(synchrony, open(os.path.join(output_basepath,
+                                                     grouping_type, network_type, 'rand_ind_%02d' % rand_ind,
                                                      '%s'
-                                                     % subject_id, 'synchrony', 'synchrony.pickle'), 'wb'))
+                                                     % subject, 'synchrony', 'synchrony.pickle'), 'wb'))
 
-            pickle.dump(mean_synchrony, open(os.path.join(out_dir,
-                                                     'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
+            pickle.dump(mean_synchrony, open(os.path.join(output_basepath,
+                                                     grouping_type, network_type, 'rand_ind_%02d' % rand_ind,
                                                      '%s'
-                                                     % subject_id, 'synchrony', 'mean_synchrony.pickle'), 'wb'))
+                                                          % subject, 'synchrony', 'mean_synchrony.pickle'), 'wb'))
 
             # from the list of subjects get only healthy subjects (coding starts with 1000). This list
             # will be used to get the optimal thresholding value only from healthy subjects
-            if int(subject_id.strip('sub-')) < 40000:
-                hc_subjects_id.append(subject_id)
+            if int(subject.strip('sub-')) < 40000:
+                hc_subjects_id.append(subject)
             # plot synchrony matrix for each time point
             # TODO: to speed up performace a bit you could implement this method:
             # http://stackoverflow.com/questions/16334588/create-a-figure-that-is-reference-counted/16337909#16337909
@@ -595,12 +647,12 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             # Calculate optimal threshold that optimises the cost-efficiency of
             # the current network..
 
-    if pairwise:
+    if grouping_type == 'pairwise':
         k_hc_optima = []
         # calculate optimal thresold on healthy subjects only
         for hc_subject in hc_subjects_id:
             # load subjects mean_synchrony
-            path_mean_synchrony = os.path.join(out_dir, 'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
+            path_mean_synchrony = os.path.join(output_basepath, grouping_type, network_type, 'rand_ind_%02d' % rand_ind,
                          '%s' % hc_subject, 'synchrony', 'mean_synchrony.pickle')
             mean_synchrony = pickle.load(open(path_mean_synchrony, 'rb'))
             temp_k_optima = calculate_optimal_k(mean_synchrony, indices)
@@ -611,15 +663,15 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
 
         print ('Optimal mean threshold: %3f' % k_optima)
 
-        for subject_id in subjects_id:
+        for subject in subjects:
             # Threshold the synchrony matrix at each time point using the just found optimal
             # threshold and save the output
             synchrony_bin = np.zeros((n_regions, n_regions, hilbert_t_points))
             # fig = plt.figure()
             for t in range(hilbert_t_points):
                 # load subject's synchrony
-                path_synchrony = os.path.join(out_dir, 'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
-                                                   '%s' % subject_id, 'synchrony', 'synchrony.pickle')
+                path_synchrony = os.path.join(output_basepath, grouping_type, network_type, 'rand_ind_%02d' % rand_ind,
+                                                   '%s' % subject, 'synchrony', 'synchrony.pickle')
                 synchrony = pickle.load(open(path_synchrony, 'rb'))
 
                 for index in indices:
@@ -639,10 +691,10 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
             #     'wb'))
 
             if graph_analysis == True:
-                graph_measures_pickle = os.path.join(out_dir, 'pairwise_comparison', network_comp,
-                                                     'rand_ind_%02d' % rand_ind, '%s' % subject_id,
-                                                     '%02d_clusters' % n_cluster,
-                                                     'graph_measures_%s.pickle' % subject_id)
+                graph_measures_pickle = os.path.join(output_basepath, grouping_type, network_type,
+                                                     'rand_ind_%02d' % rand_ind, '%s' % subject,
+                                                     '%02d_clusters' % nclusters,
+                                                     'graph_measures_%s.pickle' % subject)
                 # check if pickle with files already exist. It it exists than
                 # just load it, otherwise perform calculations.
                 if not os.path.isfile(graph_measures_pickle):
@@ -663,7 +715,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                     Ds = {}
                     # SM = np.zeros((hilbert_t_points, n_regions))
                     # Ds = np.zeros((n_regions, n_regions, hilbert_t_points))
-                    if network_comp == 'between_network':
+                    if network_type == 'between_network':
                         network = range(n_regions)
                         network_list = {}
                         for t in range(hilbert_t_points):
@@ -760,11 +812,11 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                                       'degree_centrality': degree_centrality,
                                       'path_distance': Ds_flat
                                       }
-                    pickle.dump(graph_measures, open(os.path.join(out_dir,
-                                                                  'pairwise_comparison', network_comp,
+                    pickle.dump(graph_measures, open(os.path.join(output_basepath,
+                                                                  grouping_type, network_type,
                                                                   'rand_ind_%02d' % rand_ind,
-                                                                  '%s' % subject_id, '%02d_clusters' % n_cluster,
-                                                                  'graph_measures_%s.pickle' % (subject_id)), 'wb'))
+                                                                  '%s' % subject, '%02d_clusters' % nclusters,
+                                                                  'graph_measures_%s.pickle' % (subject)), 'wb'))
                 else:
                     graph_measures = pickle.load(open(graph_measures_pickle, 'rb'))
                 # ---------------------------------------------------------------------
@@ -774,7 +826,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                 # measurement
                 # TODO: think how you want to transform SM and DM into one single
                 # matrix
-                kmeans = KMeans(n_clusters=n_cluster)
+                kmeans = KMeans(n_clusters=nclusters)
                 graph_measures_labels = {}
                 for key in graph_measures:
                     pdb.set_trace()
@@ -784,12 +836,12 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                     graph_measures_labels['n_labels_gm'], \
                     graph_measures_labels['n_classes_gm'] = shanon_entropy(graph_measures_labels[key])
 
-                pickle.dump(graph_measures_labels, open(os.path.join(out_dir,
-                                                                     'pairwise_comparison', network_comp,
+                pickle.dump(graph_measures_labels, open(os.path.join(output_basepath,
+                                                                     grouping_type, network_type,
                                                                      'rand_ind_%02d' % rand_ind,
-                                                                     '%s' % subject_id, '%02d_clusters' % n_cluster,
+                                                                     '%s' % subject, '%02d_clusters' % nclusters,
                                                                      'graph_measures_labels_shannon_%s.pickle' % (
-                                                                     subject_id)), 'wb'))
+                                                                     subject)), 'wb'))
 
             # ---------------------------------------------------------------------
             # Clustering
@@ -801,7 +853,7 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                 cluster_centroids = {}
                 for t in range(hilbert_t_points):
                     synchrony_bin_flat[t, :] = np.ndarray.flatten(synchrony_bin[:, :, t])
-                kmeans = KMeans(n_clusters=n_cluster)
+                kmeans = KMeans(n_clusters=nclusters)
                 kmeans.fit_transform(synchrony_bin_flat)
                 kmeans_labels = kmeans.labels_
                 centroids = kmeans.cluster_centers_
@@ -809,16 +861,16 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
                 total_entropy['synchrony_h'], total_entropy['s2'], \
                 total_entropy['n_labels_syn'], \
                 total_entropy['n_classes_syn'] = shanon_entropy(kmeans_labels)
-                pickle.dump(cluster_centroids, open(os.path.join(out_dir,
-                                                                 'pairwise_comparison', network_comp,
+                pickle.dump(cluster_centroids, open(os.path.join(output_basepath,
+                                                                 grouping_type, network_type,
                                                                  'rand_ind_%02d' % rand_ind,
-                                                                 '%s' % subject_id, '%02d_clusters' % n_cluster,
-                                                                 '%s_cluster_centroid.pickle' % (subject_id)), 'wb'))
-                pickle.dump(total_entropy, open(os.path.join(out_dir,
-                                                             'pairwise_comparison', network_comp,
+                                                                 '%s' % subject, '%02d_clusters' % nclusters,
+                                                                 '%s_cluster_centroid.pickle' % (subject)), 'wb'))
+                pickle.dump(total_entropy, open(os.path.join(output_basepath,
+                                                             grouping_type, network_type,
                                                              'rand_ind_%02d' % rand_ind,
-                                                             '%s' % subject_id, '%02d_clusters' % n_cluster,
-                                                             '%s_total_shannon_entropy.pickle' % (subject_id)), 'wb'))
+                                                             '%s' % subject, '%02d_clusters' % nclusters,
+                                                             '%s_total_shannon_entropy.pickle' % (subject)), 'wb'))
 
                 # # save plot of centroids
                 # n_centroids = centroids.shape[0]
@@ -833,36 +885,3 @@ def data_analysis(subjects_id, rand_ind, n_cluster, analysis_type, pairwise=True
 
             print('Done!')
             print ('--------------------------------------------------------------')
-    else:
-        # iterate over all analysed regions
-        for voi in range(n_regions):
-            phi += np.exp(np.angle(hiltrans[voi, :]) * 1j)
-        # normalise over the number of regions
-        phi *= float(1) / n_regions
-        pickle.dump(phi, open(os.path.join(out_dir,
-                                           'pairwise_comparison', network_comp, 'rand_ind_%02d' % rand_ind,
-                                           '%s' % subject_id, '%02d_clusters' % n_cluster,
-                                           'synchrony_data_%s.pickle' % (subject_id)), 'wb'))
-
-        # Reshuffle data so that it can be saved
-        all_phi[idx, 0] = int(subject_id.strip('sub'))
-        all_phi[idx, 1] = np.mean(abs(phi))
-        all_phi[idx, 2] = np.std(abs(phi))
-        idx += 1
-
-        np.savetxt(os.path.join(out_dir, 'global_comparison', 'synchrony_and_metastability.txt'), all_phi,
-                   fmt='%3d %1.4f %1.4f', delimiter=' ', header='subject_id, mean synchrony, metastability')
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('--subjects_id', required=True, nargs='*', type=str)
-#     parser.add_argument('--rand_ind', required=True, type=int)
-#     parser.add_argument('--n_cluster', required=True, type=int)
-#     args = parser.parse_args()
-
-#     # parse arguments to pass to function
-#     subjects_id = args.subjects_id
-#     rand_ind =  args.rand_ind
-#     n_cluster = args.n_cluster
-
-#     data_analysis(subjects_id, rand_ind, n_cluster)

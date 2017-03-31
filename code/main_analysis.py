@@ -24,8 +24,6 @@ subjects_filename = 'subjects.json'
 # TODO: Add input paths.
 # This folder contains all subjects' folders for the pre-processing phase.
 preprocessing_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'preprocessing_out')
-# Each subject folder will have its own output file, with the same name.
-preprocessing_output_filename = 'denoised_func_data_nonaggr_filt.nii.gz'
 
 # ROI extraction
 # Input image for ROI extraction
@@ -35,7 +33,11 @@ roi_input_segmented_regions_filename = os.path.join(base_path, 'data_in', 'voi_e
 # Image where between_network and within_network are specified.
 roi_input_network_filename = os.path.join(base_path, 'data_in', 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
 # For each subject, this folder will contain a folder with the extracted ROI.
-roi_output_basepath = os.path.join(preprocessing_output_basepath, 'extract_vois')
+roi_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'extract_roi')
+
+# Data analysis
+data_analysis_input_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'extract_roi')
+data_analysis_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'data_analysis')
 
 # Group data analysis
 group_analysis_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'data_analysis', 'pairwise_comparison')
@@ -44,8 +46,8 @@ group_analysis_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5',
 # Parameters
 ################################################################################
 
-roi_fwhm = 'fwhm_5'
 network_types = ['between_network', 'within_network', 'full_network']
+window_types = ['non-sliding', 'sliding']
 data_analysis_types = ['BOLD', 'synchrony', 'graph_analysis']
 group_analysis_types = ['hutchenson', 'ttest', '1ANOVA']
 
@@ -67,7 +69,7 @@ if __name__ == '__main__':
     # Possible activities/phases.
     parser.add_argument(
         '-p', '--preprocess',
-        action='store_true', dest='preprocessing',
+        action='store_true', dest='preprocess',
         help='Perform pre-processing of the data.'
     )
     parser.add_argument(
@@ -94,10 +96,10 @@ if __name__ == '__main__':
         help='Network type. Choose from: ' + ', '.join(network_types)
     )
     parser.add_argument(
-        '--roi-network',
-        type=int, dest='roi_network', metavar='ROI_NETWORK_BOOL',
-        choices=[0,1],
-        help='Use pre-defined network (1) or not (0) at ROI extraction.'
+        '--window-type',
+        dest='window_type', metavar='WINDOW_TYPE',
+        choices=window_types,
+        help='Window type. Choose from: ' + ', '.join(window_types)
     )
     parser.add_argument(
         '--data-analysis-type',
@@ -137,7 +139,7 @@ if __name__ == '__main__':
     ############################################################################
     # Pre-processing
     ############################################################################
-    if args.preprocess != False:
+    if args.preprocess:
         # TODO: Implement pre-processing.
         # TODO: Pre-procesing wants subjects to be a list of list.
         print('Pre-processing.')
@@ -147,51 +149,49 @@ if __name__ == '__main__':
     # ROI extraction
     ############################################################################
     if args.extract_roi:
-        if args.network_type is None or \
-           args.roi_network is None:
-            parser.error('You must specify --network_type and --roi-network.')
+        if args.network_type is None:
+            parser.error('You must specify: --network_type.')
 
         # Extract ROIs.
-        print('Extract ROI. Type: %s. Network: %s' % (args.network_type,
-                                                      bool(args.roi_network)))
+        print('Extract ROI. Type: %s.' % (args.network_type))
         extract_roi(subjects,
-                    roi_fwhm,
+                    args.network_type,
                     preprocessing_output_basepath,
-                    preprocessing_output_filename,
                     roi_input_segmented_image_filename,
                     roi_input_segmented_regions_filename,
                     roi_output_basepath,
-                    network=bool(args.roi_network),
-                    network_path=roi_input_network_filename,
-                    network_comp=args.network_type)
+                    network_mask_filename=roi_input_network_filename)
 
     ############################################################################
     # Data analysis
     ############################################################################
     if args.analyse_data:
-        if args.data_analyse_type is None or \
-           args.network_type is None or \
+        if args.network_type is None or \
+           args.window_type is None or \
+           args.data_analysis_type is None or \
            args.nclusters is None or \
            args.rand_ind is None:
             parser.error('You must specify: ' + \
+                         '--network-type, ' + \
+                         '--window-type, ' + \
                          '--data-analysis-type, ' + \
-                         '--network_type, ' + \
                          '--nclusters, ' + \
                          '--rand-ind.')
 
         # Analyse data.
-        print('Data analysis. Type: %s. Clusters: %d. Rand index: %d' %
-              (args.data_analysis_type, args.nclusters, args.rand_ind))
+        print(('Data analysis. ' +
+               'Network: %s. Window: %s ' +
+               'Type: %s. Clusters: %d. Rand index: %d') %
+              (args.network_type, args.window_type,
+               args.data_analysis_type, args.nclusters, args.rand_ind))
         data_analysis(subjects,
-                      args.rand_ind,
-                      args.nclusters,
+                      data_analysis_input_basepath,
+                      data_analysis_output_basepath,
+                      args.network_type,
+                      args.window_type,
                       args.data_analysis_type,
-                      pairwise=True, # TODO: Parametrize
-                      sliding_window=True, # TODO: Parametrize
-                      graph_analysis=False, # TODO: Parametrize
-                      network_comp=args.network_type,
-                      n_network=9
-        )
+                      args.nclusters,
+                      args.rand_ind)
 
     ############################################################################
     # Group analysis
@@ -204,7 +204,7 @@ if __name__ == '__main__':
            args.ngroups is None:
             parser.error('You must specify: ' + \
                          '--group-analysis-type, ' + \
-                         '--network_type, ' + \
+                         '--network-type, ' + \
                          '--nclusters, ' + \
                          '--rand-ind' + \
                          '--ngroups.')
