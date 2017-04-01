@@ -523,7 +523,8 @@ def data_analysis(subjects,
                          'wb'))
 
     # Calculate the optimal k from the healthy subjects only.
-    # Note: This is not needed with the BOLD data analysis.
+    # Note: This is not needed with the BOLD data analysis. The optimal k will
+    #       be used later when computing the Shannon entropy measures.
     if data_analysis_type != 'BOLD':
         # Extract the list of healthy subjects.
         # Note: We assume that the input list contains all healthy subjects
@@ -566,8 +567,16 @@ def data_analysis(subjects,
         for network in range(nnetwork_keys):
             print('Network %d: %3f' % (network, k_optima[network]))
 
-    # Calculate the Shannon entropy for every subject.
+    # Calculate the Shannon entropy measures for every subject.
     for subject in subjects:
+        subject_path = data_analysis_subject_basepath(output_basepath,
+                                                      network_type,
+                                                      window_type,
+                                                      subject)
+        if not os.path.exists(subject_path):
+            os.makedirs(subject_path)
+
+        # Behave differently based on data analysis type.
         if data_analysis_type == 'BOLD':
             # Apply a threshold to the data. We use the 1.3 default value.
             data_path = os.path.join(input_basepath, subject, 'full_network.txt')
@@ -576,10 +585,6 @@ def data_analysis(subjects,
             thr_data = bold_plot_threshold(data, nregions, threshold=1.3)
 
             # Save thresholded image of BOLD.
-            subject_path = data_analysis_subject_basepath(output_basepath,
-                                                          network_type,
-                                                          window_type,
-                                                          subject)
             fig = plt.figure()
             plt.imshow(thr_data, interpolation='nearest')
             fig.savefig(os.path.join(subject_path, 'bold.png'))
@@ -603,11 +608,10 @@ def data_analysis(subjects,
                         open(os.path.join(save_path, 'bold_shanon.pickle'),
                              'wb'))
         else:
+            # This first part of the code is common to the synchrony and graph
+            # analysis data analysis types.
+
             # Load synchrony for the subject.
-            subject_path = data_analysis_subject_basepath(output_basepath,
-                                                          network_type,
-                                                          window_type,
-                                                          healthy_subject)
             dynamic_measures = pickle.load(
                 open(os.path.join(subject_path, 'dynamic_measures.pickle'),
                      'rb'))
@@ -635,8 +639,40 @@ def data_analysis(subjects,
                     synchrony_bin[:, :, t] = mirror_array(synchrony_bin[:, :, t])
                 synchrony_bins[network] = synchrony_bin
 
+            # The actual measures we save depend on the data analysis type.
             if data_analysis_type == 'synchrony':
-                pass
+                shannon_entropy_measures = {}
+                for network in range(nnetwork_keys):
+                    # Flatten the synchrony bin for the current network.
+                    nregions = synchrony_bins[network].shape[0]
+                    ntpoints = synchrony_bins[network].shape[2]
+                    synchrony_bin_flat = np.zeros((ntpoints, nregions * nregions))
+                    for t in range(ntpoints):
+                        synchrony_bin_flat[t, :] = \
+                            np.ndarray.flatten(synchrony_bins[network][:, :, t])
+
+                    # Calculate the k means for synchrony.
+                    kmeans = KMeans(n_clusters=nclusters)
+                    kmeans.fit_transform(synchrony_bin_flat)
+                    kmeans_labels = kmeans.labels_
+                    synchrony_h, \
+                    s2, \
+                    n_labels_syn, \
+                    n_classes_syn = shanon_entropy(kmeans_labels)
+
+                    # Save the results.
+                    shannon_entropy_measures[network] = {
+                        'centroids': kmeans.cluster_centers_,
+                        'synchrony_h': synchrony_h,
+                        's2': s2,
+                        'n_labels_syn': n_labels_syn,
+                        'n_classes_syn': n_classes_syn
+                    }
+
+                # Dump the results in a pickle file.
+                pickle.dump(shannon_entropy_measures,
+                            open(os.path.join(subject_path, 'shannon_entropy_measures.pickle'),
+                                 'wb'))
             elif data_analysis_type == 'graph_analysis':
                 pass
             else:
@@ -805,46 +841,6 @@ def data_analysis(subjects,
                                                                      '%s' % subject, '%02d_clusters' % nclusters,
                                                                      'graph_measures_labels_shannon_%s.pickle' % (
                                                                      subject)), 'wb'))
-
-            # ---------------------------------------------------------------------
-            # Clustering
-            # ---------------------------------------------------------------------
-            # Calculate the K-means clusters
-            if graph_analysis == False:
-                synchrony_bin_flat = np.zeros((hilbert_t_points, (synchrony_bin.shape[0]) ** 2))
-                total_entropy = {}
-                cluster_centroids = {}
-                for t in range(hilbert_t_points):
-                    synchrony_bin_flat[t, :] = np.ndarray.flatten(synchrony_bin[:, :, t])
-                kmeans = KMeans(n_clusters=nclusters)
-                kmeans.fit_transform(synchrony_bin_flat)
-                kmeans_labels = kmeans.labels_
-                centroids = kmeans.cluster_centers_
-                cluster_centroids['centroids'] = centroids
-                total_entropy['synchrony_h'], total_entropy['s2'], \
-                total_entropy['n_labels_syn'], \
-                total_entropy['n_classes_syn'] = shanon_entropy(kmeans_labels)
-                pickle.dump(cluster_centroids, open(os.path.join(output_basepath,
-                                                                 grouping_type, network_type,
-                                                                 'rand_ind_%02d' % rand_ind,
-                                                                 '%s' % subject, '%02d_clusters' % nclusters,
-                                                                 '%s_cluster_centroid.pickle' % (subject)), 'wb'))
-                pickle.dump(total_entropy, open(os.path.join(output_basepath,
-                                                             grouping_type, network_type,
-                                                             'rand_ind_%02d' % rand_ind,
-                                                             '%s' % subject, '%02d_clusters' % nclusters,
-                                                             '%s_total_shannon_entropy.pickle' % (subject)), 'wb'))
-
-                # # save plot of centroids
-                # n_centroids = centroids.shape[0]
-                # for ncentroid in range(n_centroids):
-                #     state = numpy.zeros((n_regions,n_regions))
-                #     n_centroid = centroids[ncentroid]
-                #     for ii in range(82):
-                #         states[ii,:] = n_centroid[82*ii:82*(ii+1)]
-                #         plt.imshow(states, interpolation='nearest')
-                #         fig.savefig('state_%s.png' %ncentroid)
-                #         plt.clf()
 
             print('Done!')
             print ('--------------------------------------------------------------')
