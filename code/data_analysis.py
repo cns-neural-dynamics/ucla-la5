@@ -359,8 +359,8 @@ def estimate_small_wordness(synchrony_bin, rand_ind):
     return SM, Ds
 
 
-def shanon_entropy(labels):
-    """ Computes Shanon entropy using the labels distribution """
+def shannon_entropy(labels):
+    """ Computes Shannon entropy using the labels distribution """
     n_labels = labels.shape[0]
 
     # check number of labels and if there is only 1 class return 0
@@ -592,20 +592,20 @@ def data_analysis(subjects,
             plt.close()
 
             # Perfom k-means on the BOLD signal.
-            bold_shanon_entropy = {}
+            bold_shannon_entropy = {}
             kmeans_bold = KMeans(n_clusters=nclusters)
             kmeans_bold.fit_transform(np.transpose(thr_data))
             kmeans_bold_labels = kmeans_bold.labels_
 
             # Calculate Shannon Entropy.
-            bold_shanon_entropy['bold_h'], bold_shanon_entropy['s2'], \
-            bold_shanon_entropy['n_labels_bold'], \
-            bold_shanon_entropy['n_classes_bold'] = shanon_entropy(kmeans_bold_labels)
+            bold_shannon_entropy['bold_h'], bold_shannon_entropy['s2'], \
+            bold_shannon_entropy['n_labels_bold'], \
+            bold_shannon_entropy['n_classes_bold'] = shannon_entropy(kmeans_bold_labels)
             save_path = os.path.join(subject_path, 'nclusters_%d' % (nclusters))
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-            pickle.dump(bold_shanon_entropy,
-                        open(os.path.join(save_path, 'bold_shanon.pickle'),
+            pickle.dump(bold_shannon_entropy,
+                        open(os.path.join(save_path, 'bold_shannon.pickle'),
                              'wb'))
         else:
             # This first part of the code is common to the synchrony and graph
@@ -658,7 +658,7 @@ def data_analysis(subjects,
                     synchrony_h, \
                     s2, \
                     n_labels_syn, \
-                    n_classes_syn = shanon_entropy(kmeans_labels)
+                    n_classes_syn = shannon_entropy(kmeans_labels)
 
                     # Save the results.
                     shannon_entropy_measures[network] = {
@@ -670,8 +670,13 @@ def data_analysis(subjects,
                     }
 
                 # Dump the results in a pickle file.
+                save_path = os.path.join(subject_path,
+                                         'nclusters_%d' % (nclusters))
+                if not os.path.exists(save_path):
+                    os.makedirs(save_path)
                 pickle.dump(shannon_entropy_measures,
-                            open(os.path.join(subject_path, 'shannon_entropy_measures.pickle'),
+                            open(os.path.join(subject_path,
+                                              'synchrony_shannon_entropy_measures.pickle'),
                                  'wb'))
             elif data_analysis_type == 'graph_analysis':
                 shannon_entropy_measures = {}
@@ -775,7 +780,7 @@ def data_analysis(subjects,
                     os.makedirs(save_path)
                 pickle.dump(shannon_entropy_measures,
                             open(os.path.join(save_path,
-                                              'shannon_entropy_measures.pickle'),
+                                              'graph_analysis_shannon_entropy_measures.pickle'),
                                  'wb'))
 
                 # ---------------------------------------------------------------------
@@ -793,7 +798,7 @@ def data_analysis(subjects,
                     graph_measures_labels[key] = kmeans.labels_
                     graph_measures_labels[key + '_h'], graph_measures_labels[key + 's2'], \
                     graph_measures_labels['n_labels_gm'], \
-                    graph_measures_labels['n_classes_gm'] = shanon_entropy(graph_measures_labels[key])
+                    graph_measures_labels['n_classes_gm'] = shannon_entropy(graph_measures_labels[key])
 
                 pickle.dump(graph_measures_labels, open(os.path.join(output_basepath,
                                                                      grouping_type, network_type,
