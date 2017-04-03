@@ -679,25 +679,25 @@ def data_analysis(subjects,
                                               'synchrony_shannon_entropy_measures.pickle'),
                                  'wb'))
             elif data_analysis_type == 'graph_analysis':
+                graph_theory_measures = {}
                 shannon_entropy_measures = {}
                 for network in range(nnetwork_keys):
                     nregions = synchrony_bins[network].shape[0]
                     ntpoints = synchrony_bins[network].shape[2]
-                    shannon_entropy_measures[network] = {}
+                    graph_theory_measures[network] = {}
 
                     # Degree centrality:
                     # -------------------
                     degree_centrality = np.transpose(
                         degrees_und(synchrony_bins[network]))
-                    shannon_entropy_measures[network]['degree_centrality'] = \
+                    graph_theory_measures[network]['degree_centrality'] = \
                         degree_centrality
 
                     # Iterate over time to obtain different network measurements.
                     weight = np.zeros((ntpoints, nregions))
                     w = np.multiply(synchrony[network], synchrony_bins[network])
-                    SM = []
-                    Ds = []
-                    Ds_flat = []
+                    SM = {}
+                    Ds = {}
                     for t in range(ntpoints):
                         # Weight
                         # -------------------
@@ -705,12 +705,6 @@ def data_analysis(subjects,
                         # weight over all regions.
                         for roi in range(nregions):
                             weight[t, roi] = np.average(w[:, roi, t])
-                        shannon_entropy_measures[network]['weight'] = weight
-
-                        # Transitivity:
-                        # -------------------
-                        transitivity = transitivity_bu(synchrony_bins[network][:, :, t])
-                        shannon_entropy_measures[network]['transitivity'] = transitivity
 
                         # Small-worldness
                         # ------------------
@@ -740,8 +734,8 @@ def data_analysis(subjects,
 
                         # Calculate the small-worldness for each remaining
                         # component.
-                        SM_component = {}
-                        Ds_component = {}
+                        SM[component] = np.zeros((ntpoints, nregions))
+                        Ds[component] = np.zeros((ntpoints, nregions * nregions))
                         for component in components:
                             # Select the portion of the synchrony bin containing
                             # only the regions for this component.
@@ -758,56 +752,49 @@ def data_analysis(subjects,
                             # Compute the small worldness for this component.
                             sm, ds = estimate_small_wordness(
                                 synchrony_bin_component[:, :], rand_ind)
-                            SM_component[component] = sm
-                            Ds_component[component] = ds
-
-                            # Flatten the synchrony matrix and path_distance so
-                            # that it can be given as argument for the K-means
-                            Ds_flat_component = np.ndarray.flatten(ds)
-                        SM.append(SM_component)
-                        Ds.append(Ds_component)
-                        Ds_flat.append(Ds_flat_component)
+                            SM[component][t, :] = sm
+                            Ds[component][t, :] = np.ndarrary.flatten(ds)
 
                     # Save results to a dictionary.
-                    shannon_entropy_measures[network]['SM'] = SM
-                    shannon_entropy_measures[network]['Ds_flat'] = Ds_flat
+                    graph_theory_measures[network]['weight'] = weight
+                    graph_theory_measures[network]['SM'] = SM
+                    graph_theory_measures[network]['Ds'] = Ds
 
-                # Dump results into a pickle file.
+                    # Perform K-means and calculate Shannon Entropy for each
+                    # graph theory measurement.
+                    # TODO: think how you want to transform SM and DM into one
+                    # single matrix.
+                    kmeans = KMeans(n_clusters=nclusters)
+                    shannon_entropy_measures[network] = {}
+                    for measure in graph_theory_measures[network]:
+                        shannon_entropy_measures[network][measure] = {}
+                        measures = shannon_entropy_measures[network][measure]
+
+                        # Calculate the k-means for the current measure.
+                        kmeans.fit_transform(graph_theory_measures[network][measure])
+
+                        # Save the results in the measure-specific dictionary.
+                        measures['labels'] = kmeans.labels_
+                        measures['entropy'], \
+                        measures['s2'], \
+                        measures['n_labels_gm'], \
+                        measures['n_classes_gm'] = \
+                            shannon_entropy(graph_theory_measures[network][measure])
+
+                # Dump results into two pickle files.
                 save_path = os.path.join(subject_path,
                                          'nclusters_%d' % (nclusters),
                                          'rand_ind_%d' % (rand_ind))
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
+                pickle.dump(graph_theory_measures,
+                            open(os.path.join(save_path,
+                                              'graph_analysis_measures.pickle'),
+                                 'wb'))
                 pickle.dump(shannon_entropy_measures,
                             open(os.path.join(save_path,
                                               'graph_analysis_shannon_entropy_measures.pickle'),
                                  'wb'))
-
-                # ---------------------------------------------------------------------
-                # Clustering
-                # ---------------------------------------------------------------------
-                # Perform K-means and calculate Shannon Entropy for each graph theory
-                # measurement
-                # TODO: think how you want to transform SM and DM into one single
-                # matrix
-                kmeans = KMeans(n_clusters=nclusters)
-                graph_measures_labels = {}
-                for key in graph_measures:
-                    pdb.set_trace()
-                    kmeans.fit_transform(graph_measures[key])
-                    graph_measures_labels[key] = kmeans.labels_
-                    graph_measures_labels[key + '_h'], graph_measures_labels[key + 's2'], \
-                    graph_measures_labels['n_labels_gm'], \
-                    graph_measures_labels['n_classes_gm'] = shannon_entropy(graph_measures_labels[key])
-
-                pickle.dump(graph_measures_labels, open(os.path.join(output_basepath,
-                                                                     grouping_type, network_type,
-                                                                     'rand_ind_%02d' % rand_ind,
-                                                                     '%s' % subject, '%02d_clusters' % nclusters,
-                                                                     'graph_measures_labels_shannon_%s.pickle' % (
-                                                                     subject)), 'wb'))
-
-                pass
             else:
                 raise ValueError('Unrecognised data analysis type: %s' %
                                  (data_analysis_type))
