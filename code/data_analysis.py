@@ -334,7 +334,7 @@ def estimate_small_wordness(synchrony_bin, rand_ind):
     Returns
     --------
     SM: small world coefficient
-    Ds: distance matrix. Whith lenght of the shortest matrix
+    Ds: distance matrix. Whith length of the shortest matrix
     """
 
     G_rand = randmio_und_connected(synchrony_bin, rand_ind)[0]
@@ -424,7 +424,7 @@ def data_analysis(subjects,
                   nclusters,
                   rand_ind,
                   graph_analysis=True, # FIXME
-                  window_size=20, # FIXME
+                  window_size=5, # FIXME specify as input parameter
                   n_time_points=184):
     ''' Compute the main analysis. This function calculates the synchrony,
     metastability and perform the graph analysis.
@@ -714,6 +714,16 @@ def data_analysis(subjects,
                         regions2component_mapping = clustering.get_components(
                             synchrony_bins[network][:, :, t])[0]
                         regions_per_component = np.bincount(regions2component_mapping)
+
+                        # TODO:
+                        # 1. Pick component with highest number of regions in it, for this timepoint.
+                        # 2. Save the regions belonging to the component in (1.) for this timepoint.
+                        # 3. Delete all the code below here.
+                        # 4. After the loop we are into right now, add code to intersect all the sets
+                        #    (as many as the ntpoints). The intersections gives you the maximum common
+                        #    "divisor" (MCD) for the network.
+                        # 5. After the loop we are into right now, add an additional loop over ntpoints
+                        #    to compute sm, ds for each timepoint for the regions in said MCD.
 
                         # Eliminate all components that only have one region.
                         synchrony_bin_sw = synchrony_bins[network]
