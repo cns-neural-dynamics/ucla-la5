@@ -14,7 +14,7 @@ from subjects import load_subjects
 ################################################################################
 
 # Base path for all input and output data.
-base_path = os.path.join(os.path.sep, 'home', 'jdafflon', 'scratch', 'personal')
+base_path = os.path.join(os.path.sep, 'home', 'jdafflon', 'data', 'ucla-la5')
 
 # Subjects
 # FIXME: Move to data_in folder.
@@ -33,10 +33,10 @@ roi_input_segmented_regions_filename = os.path.join(base_path, 'data_in', 'voi_e
 # Image where between_network and within_network are specified.
 roi_input_network_filename = os.path.join(base_path, 'data_in', 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
 # For each subject, this folder will contain a folder with the extracted ROI.
-roi_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'extract_roi')
+roi_output_basepath = os.path.join(base_path, 'data_out', 'extract_roi')
 
 # Data analysis
-data_analysis_input_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'extract_roi')
+data_analysis_input_basepath = os.path.join(base_path, 'data_out', 'extract_roi')
 data_analysis_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'data_analysis')
 
 # Group data analysis
