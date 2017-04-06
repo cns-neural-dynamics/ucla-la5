@@ -16,8 +16,7 @@ from bct import (degrees_und, distance_bin, transitivity_bu, clustering_coef_bu,
                  randmio_und_connected, charpath, clustering)
 from sklearn.cluster import KMeans
 import nibabel as nib
-import progressbar
-import pdb
+
 
 
 def extract_roi(subjects,
@@ -170,7 +169,7 @@ def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mas
     return netw, net_filter
 
 
-def compute_hilbert_tranform(data, TR=2, upper_bound=0.07, lower_bound=0.04):
+def compute_hilbert_tranform(data, TR=2, upper_bound=0.1, lower_bound=0.04):
     """ Perform Hilbert Transform on given data. This allows extraction of phase
      information of the empirical data"""
     # Initialise TimeSeries object
