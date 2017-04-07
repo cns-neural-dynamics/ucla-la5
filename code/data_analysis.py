@@ -1,6 +1,7 @@
 #!/share/apps/anaconda/bin/python
 # -*- coding: ascii -*-
 from __future__ import division
+
 import matplotlib
 matplotlib.use('Agg')  # allow generation of images without user interface
 import matplotlib.pyplot as plt
@@ -8,16 +9,151 @@ import numpy as np
 import pickle
 import os
 import glob
-from math import log
+import nibabel as nib
 from nitime.timeseries import TimeSeries
 from nitime.analysis import FilterAnalyzer
 from scipy.signal import hilbert
+from scipy.stats import entropy
 from bct import (degrees_und, distance_bin, transitivity_bu, clustering_coef_bu,
                  randmio_und_connected, charpath, clustering)
 from sklearn.cluster import KMeans
-import nibabel as nib
 
 
+def calculate_subject_optimal_k(mean_synchrony, indices, k_lower=0.1, k_upper=1.0, k_step=0.01):
+    """ Iterate over different threshold (k) to find the optimal value to use a
+    threshold. This function finds the optimal threshold that allows the
+    trade-off between cost and efficiency to be minimal.
+
+    In order obtain the best threshold for all time points, the mean of the
+    synchrony over time is used as the connectivity matrix.
+
+    The here implemented approach was based on Bassett-2009Cognitive
+
+    """
+    # obtain the number of regions according to the passed dataset
+    n_regions = mean_synchrony.shape[0]
+
+    EC_optima = 0  # cost-efficiency
+    k_optima = 0  # threshold
+    for k in np.arange(k_lower, k_upper, k_step):
+        # Binarise connection matrix according with the threshold
+        mean_synchrony_bin = np.zeros((mean_synchrony.shape))
+        for index in indices:
+            if mean_synchrony[index[0], index[1]] >= k:
+                mean_synchrony_bin[index[0], index[1]] = 1
+        mean_synchrony_bin = mirror_array(mean_synchrony_bin)
+
+        # calculate the shortest path length between each pair of regions using
+        # the geodesic distance
+        D = distance_bin(mean_synchrony_bin)
+        # calculate cost
+        C = estimate_cost(n_regions, mean_synchrony_bin)
+
+        # Calculate the distance for the regional efficiency at the current
+        # threshold
+        E_reg = np.zeros((n_regions))
+        for ii in range(D.shape[0]):
+            sum_D = 0
+            for jj in range(D.shape[1]):
+                # check if the current value is different from inf or 0 and
+                # sum it (inf represents the absence of a connection)
+                if jj == ii:
+                    continue
+                elif D[ii, jj] == np.inf:
+                    continue
+                else:
+                    sum_D += 1 / float(D[ii, jj])
+            E_reg[ii] = sum_D / float(n_regions - 1)
+
+        # From the regional efficiency calculate the global efficiency for the
+        # current threshold
+        E = np.mean(E_reg)
+        # update the current optimal Efficiency
+        if E - C > EC_optima:
+            EC_optima = E - C
+            k_optima = k
+    return k_optima
+
+
+def estimate_cost(N, G):
+    """ Calculate costs using the formula described in Basset-2009Cognitive """
+    tmp = 0
+    for ii in range(G.shape[0]):
+        for jj in range(G.shape[1]):
+            if jj == ii:
+                continue
+            tmp += G[ii, jj]
+        cost = tmp / float(N * (N - 1))
+    return cost
+
+
+def calculate_healthy_optimal_k(input_basepath, output_basepath, network_type, window_size, window_type):
+    #?Compute optimal threshold using this list of healthy subjects (n=20).
+    subjects = [
+        # FIXME: for testing purpuse use this subject
+          'sub-10159'
+       # FIXME: run preprocessing and VOI extraction for this subjects
+        # 'sub-11067',
+        # 'sub-11068',
+        # 'sub-11077',
+        # 'sub-11088',
+        # 'sub-11090',
+        # 'sub-11097',
+        # 'sub-11098',
+        # 'sub-11104',
+        # 'sub-11105',
+        # 'sub-11106',
+        # 'sub-11108',
+        # 'sub-11112',
+        # 'sub-11121',
+        # 'sub-11122',
+        # 'sub-11128',
+        # 'sub-11131',
+        # 'sub-11142',
+        # 'sub-11143',
+        # 'sub-11149',
+        # 'sub-11156'
+    ]
+
+    calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type)
+
+    # Calculate how many networks keys there are.
+    nnetwork_keys = check_number_networks(subjects, input_basepath,
+                                          network_type)
+
+    # Calculate the optimal k for each subject's network.
+    healthy_k_optima = {key: [] for key in range(nnetwork_keys)}
+    for subject in subjects:
+        # Load the mean_synchrony for the subject.
+        subject_path = data_analysis_subject_basepath(output_basepath,
+                                                      network_type,
+                                                      window_type,
+                                                      subject)
+        dynamic_measures = pickle.load(
+            open(os.path.join(subject_path, 'dynamic_measures.pickle'),
+                 'rb'))
+        if len(dynamic_measures.keys()) != nnetwork_keys:
+            raise ValueError('Inconsistent number of networks for ' +
+                             'subject %s. In nnetwork_keys: %d. In pickle: %d.' %
+                             (subject, nnetwork_keys,
+                              len(dynamic_measures.keys())))
+        mean_synchrony = {key: dynamic_measures[key]['mean_synchrony'] \
+                          for key in range(nnetwork_keys)}
+        # Calculate the optimal k for each subject's network.
+        for network in range(nnetwork_keys):
+            nregions = mean_synchrony[network].shape[0]
+            indices = np.tril_indices(nregions)
+            indices = zip(indices[0], indices[1])
+            healthy_k_optima[network].append(
+                calculate_subject_optimal_k(mean_synchrony[network], indices))
+
+    # Find optimal mean of healthy subjects.
+    k_optima = {}
+    print ('Optimal mean threshold:')
+    for network in range(nnetwork_keys):
+        k_optima[network] = np.mean(healthy_k_optima[network])
+        print('Network %d: %3f' % (network, k_optima[network]))
+    return healthy_k_optima
 
 def extract_roi(subjects,
                 network_type,
@@ -169,6 +305,84 @@ def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mas
     return netw, net_filter
 
 
+def check_number_networks(subjects, input_basepath, network_type):
+    # Calculate how many networks keys there are. The number of networks for within network
+    # is defined based on the known extracted ROIs.
+    # We use the first subject for this purpose.
+    data_path = os.path.join(input_basepath, subjects[0])
+    if network_type == 'between_network':
+        nnetwork_keys = 1
+    elif network_type == 'within_network':
+        nnetwork_keys = len(glob.glob1(data_path, "within_network_*.txt"))
+    elif network_type == 'full_network':
+        nnetwork_keys = 1
+    else:
+        raise ValueError('Unrecognised network type: %s' % (network_type))
+    return nnetwork_keys
+
+
+def calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type):
+    # Find number of network for dataset
+    nnetwork_keys = check_number_networks(subjects, input_basepath, network_type)
+
+    # Compute synchrony, metastability and mean synchrony for each subject, both
+    # globally and pairwise.
+    for subject in subjects:
+        # Calculate Hilbert transform for the network(s).
+        # Import ROI data for each VOI.
+        # The actual data depends on the network type.
+        hilbert_transforms = {}
+        if network_type == 'between_network':
+            data_path = os.path.join(input_basepath, subject, 'between_network.txt')
+            data = np.genfromtxt(data_path)
+            hilbert_transforms[0] = compute_hilbert_tranform(data)
+        elif network_type == 'within_network':
+            for network in range(nnetwork_keys):
+                data_path = os.path.join(input_basepath, subject, 'within_network_%d.txt' % network)
+                data = np.genfromtxt(data_path)
+                hilbert_transforms[network] = compute_hilbert_tranform(data)
+        elif network_type == 'full_network':
+            data_path = os.path.join(input_basepath, subject, 'full_network.txt')
+            data = np.genfromtxt(data_path)
+            hilbert_transforms[0] = compute_hilbert_tranform(data)
+
+        # Calculate data synchrony following Hellyer-2015_Cognitive.
+        dynamic_measures = {}
+        for network in hilbert_transforms:
+            # Apply sliding windowing if required.
+            hilbert_transform = hilbert_transforms[network]
+            if window_type == 'sliding':
+                hilbert_transform = apply_sliding_window(hilbert_transform,
+                                                         window_size)
+
+            # Calculate synchrony, metastability and mean synchrony.
+            synchrony, \
+            mean_synchrony, \
+            metastability, \
+            global_synchrony, \
+            global_metastability = calculate_phi(hilbert_transform)
+
+            # Save the results for later dump.
+            dynamic_measures[network] = {
+                'synchrony': synchrony,
+                'metastability': metastability,
+                'mean_synchrony': mean_synchrony,
+                'global_synchrony': global_synchrony,
+                'global_metastability': global_metastability
+            }
+
+        # Dump results for all networks, for this subject, into a pickle file.
+        subject_path = data_analysis_subject_basepath(output_basepath,
+                                                      network_type, window_type,
+                                                      subject)
+        if not os.path.exists(subject_path):
+            os.makedirs(subject_path)
+        pickle.dump(dynamic_measures,
+                    open(os.path.join(subject_path, 'dynamic_measures.pickle'),
+                         'wb'))
+    return mean_synchrony
+
+
 def compute_hilbert_tranform(data, TR=2, upper_bound=0.1, lower_bound=0.04):
     """ Perform Hilbert Transform on given data. This allows extraction of phase
      information of the empirical data"""
@@ -222,7 +436,7 @@ def calculate_phi(hiltrans):
     indices = zip(indices[0], indices[1])
 
     phi = np.zeros((n_regions, n_regions, hilbert_t_points), dtype=complex)
-    pair_synchrony = np.zeros((n_regions, n_regions))
+    mean_synchrony = np.zeros((n_regions, n_regions))
     pair_metastability = np.zeros((n_regions, n_regions))
     # find the phase angle of the data
     phase_angle = np.angle(hiltrans)
@@ -237,7 +451,7 @@ def calculate_phi(hiltrans):
         # this case is 2.
         phi[index[0], index[1], :] /= 2
         # each value represent the synchrony between two regions over all time points
-        pair_synchrony[index[0], index[1]] = np.mean(abs(phi[index[0], index[1], :]))
+        mean_synchrony[index[0], index[1]] = np.mean(abs(phi[index[0], index[1], :]))
         # each value represent the standard deviation of synchrony over the time points
         pair_metastability[index[0], index[1]] = np.std(abs(phi[index[0], index[1], :]))
     synchrony = abs(phi)
@@ -245,11 +459,11 @@ def calculate_phi(hiltrans):
     # Mirror each time point of synchrony
     for time_p in range(synchrony.shape[2]):
         synchrony[:, :, time_p] = mirror_array(synchrony[:, :, time_p])
-    pair_synchrony = mirror_array(pair_synchrony)
+    mean_synchrony = mirror_array(mean_synchrony)
     pair_metastability = mirror_array(pair_metastability)
-    global_synchrony = np.mean(np.tril(pair_synchrony), -1)
+    global_synchrony = np.mean(np.tril(mean_synchrony), -1)
     global_metastability = np.std(global_synchrony)
-    return synchrony, pair_synchrony, pair_metastability, \
+    return synchrony, mean_synchrony, pair_metastability, \
            global_synchrony, global_metastability
 
 
@@ -257,73 +471,6 @@ def mirror_array(array):
     """ Mirror results obtained on the lower diagonal to the Upper diagonal """
     return array + np.transpose(array) - np.diag(array.diagonal())
 
-
-def calculate_optimal_k(mean_synchrony, indices, k_lower=0.1, k_upper=1.0, k_step=0.01):
-    """ Iterate over different threshold (k) to find the optimal value to use a
-    threshold. This function finds the optimal threshold that allows the
-    trade-off between cost and efficiency to be minimal.
-
-    In order obtain the best threshold for all time points, the mean of the
-    synchrony over time is used as the connectivity matrix.
-
-    The here implemented approach was based on Bassett-2009Cognitive
-
-    """
-    # obtain the number of regions according to the passed dataset
-    n_regions = mean_synchrony.shape[0]
-
-    EC_optima = 0  # cost-efficiency
-    k_optima = 0  # threshold
-    for k in np.arange(k_lower, k_upper, k_step):
-        # Binarise connection matrix according with the threshold
-        mean_synchrony_bin = np.zeros((mean_synchrony.shape))
-        for index in indices:
-            if mean_synchrony[index[0], index[1]] >= k:
-                mean_synchrony_bin[index[0], index[1]] = 1
-        mean_synchrony_bin = mirror_array(mean_synchrony_bin)
-
-        # calculate the shortest path length between each pair of regions using
-        # the geodesic distance
-        D = distance_bin(mean_synchrony_bin)
-        # calculate cost
-        C = estimate_cost(n_regions, mean_synchrony_bin)
-
-        # Calculate the distance for the regional efficiency at the current
-        # threshold
-        E_reg = np.zeros((n_regions))
-        for ii in range(D.shape[0]):
-            sum_D = 0
-            for jj in range(D.shape[1]):
-                # check if the current value is different from inf or 0 and
-                # sum it (inf represents the absence of a connection)
-                if jj == ii:
-                    continue
-                elif D[ii, jj] == np.inf:
-                    continue
-                else:
-                    sum_D += 1 / float(D[ii, jj])
-            E_reg[ii] = sum_D / float(n_regions - 1)
-
-        # From the regional efficiency calculate the global efficiency for the
-        # current threshold
-        E = np.mean(E_reg)
-        # update the current optimal Efficiency
-        if E - C > EC_optima:
-            EC_optima = E - C
-            k_optima = k
-    return k_optima
-
-
-def estimate_cost(N, G):
-    """ Calculate costs using the formula described in Basset-2009Cognitive """
-    tmp = 0
-    for ii in range(G.shape[0]):
-        for jj in range(G.shape[1]):
-            if jj == ii:
-                continue
-            tmp += G[ii, jj]
-        cost = tmp / float(N * (N - 1))
-    return cost
 
 
 def estimate_small_wordness(synchrony_bin, rand_ind):
@@ -358,34 +505,6 @@ def estimate_small_wordness(synchrony_bin, rand_ind):
     return SM, Ds
 
 
-def shannon_entropy(labels):
-    """ Computes Shannon entropy using the labels distribution """
-    n_labels = labels.shape[0]
-
-    # check number of labels and if there is only 1 class return 0
-    if n_labels <= 1:
-        return 0
-
-    # bincount return the counts in an ascendent format.
-    counts = np.bincount(labels)
-    probs = counts / float(n_labels)
-    n_classes = probs.shape[0]
-
-    if n_classes <= 1:
-        return 0
-
-    ent = 0
-
-    # Compute Shannon Entropy
-    ss = 0
-    sq = 0
-    for prob in probs:
-        ent -= prob * log(prob, 2)
-        ss += prob * (log(prob, 2)) ** 2
-        sq += (prob * log(prob, 2)) ** 2
-    s2 = ((ss - sq) / float(n_labels)) - ((n_classes - 1) / float(2 *
-                                                                  (n_labels) ** 2))
-    return ent, s2, n_labels, n_classes  # count is an array you might want to
 
 
 # return n_classes instead
@@ -453,118 +572,15 @@ def data_analysis(subjects,
         raise ValueError('The BOLD data analysis only works with ' +
                          'full_network networks.')
 
-    # Calculate how many networks keys there are.
-    # We use the first subject for this purpose.
-    data_path = os.path.join(input_basepath, subjects[0])
-    if network_type == 'between_network':
-        nnetwork_keys = 1
-    elif network_type == 'within_network':
-        nnetwork_keys = len(glob.glob1(data_path, "within_network_*.txt"))
-    elif network_type == 'full_network':
-        nnetwork_keys = 1
-    else:
-        raise ValueError('Unrecognised network type: %s' % (network_type))
-
-    # Compute synchrony, metastability and mean synchrony for each subject, both
-    # globally and pairwise.
-    for subject in subjects:
-        # Calculate Hilbert transform for the network(s).
-        # Import ROI data for each VOI.
-        # The actual data depends on the network type.
-        hilbert_transforms = {}
-        if network_type == 'between_network':
-            data_path = os.path.join(input_basepath, subject, 'between_network.txt')
-            data = np.genfromtxt(data_path)
-            hilbert_transforms[0] = compute_hilbert_tranform(data)
-        elif network_type == 'within_network':
-            for network in range(nnetwork_keys):
-                data_path = os.path.join(input_basepath, subject, 'within_network_%d.txt' % network)
-                data = np.genfromtxt(data_path)
-                hilbert_transforms[network] = compute_hilbert_tranform(data)
-        elif network_type == 'full_network':
-            data_path = os.path.join(input_basepath, subject, 'full_network.txt')
-            data = np.genfromtxt(data_path)
-            hilbert_transforms[0] = compute_hilbert_tranform(data)
-
-        # Calculate data synchrony following Hellyer-2015_Cognitive.
-        dynamic_measures = {}
-        for network in hilbert_transforms:
-            # Apply sliding windowing if required.
-            hilbert_transform = hilbert_transforms[network]
-            if window_type == 'sliding':
-                hilbert_transform = apply_sliding_window(hilbert_transform,
-                                                         window_size)
-
-            # Calculate synchrony, metastability and mean synchrony.
-            synchrony, \
-            mean_synchrony, \
-            metastability, \
-            global_synchrony, \
-            global_metastability = calculate_phi(hilbert_transform)
-
-            # Save the results for later dump.
-            dynamic_measures[network] = {
-                'synchrony': synchrony,
-                'metastability': metastability,
-                'mean_synchrony': mean_synchrony,
-                'global_synchrony': global_synchrony,
-                'global_metastability': global_metastability
-            }
-
-        # Dump results for all networks, for this subject, into a pickle file.
-        subject_path = data_analysis_subject_basepath(output_basepath,
-                                                      network_type, window_type,
-                                                      subject)
-        if not os.path.exists(subject_path):
-            os.makedirs(subject_path)
-        pickle.dump(dynamic_measures,
-                    open(os.path.join(subject_path, 'dynamic_measures.pickle'),
-                         'wb'))
-
+    calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type)
     # Calculate the optimal k from the healthy subjects only.
     # Note: This is not needed with the BOLD data analysis. The optimal k will
     #       be used later when computing the Shannon entropy measures.
     if data_analysis_type != 'BOLD':
-        # Extract the list of healthy subjects.
-        # Note: We assume that the input list contains all healthy subjects
-        #       first, then all the schizophrenic ones.
-        healthy_subjects = subjects[:(len(subjects) // 2)]
-
-        # Calculate the threshold.
-        healthy_k_optima = {key: [] for key in range(nnetwork_keys)}
-        for healthy_subject in healthy_subjects:
-            # Load the mean_synchrony for the subject.
-            subject_path = data_analysis_subject_basepath(output_basepath,
-                                                          network_type,
-                                                          window_type,
-                                                          healthy_subject)
-            dynamic_measures = pickle.load(
-                open(os.path.join(subject_path, 'dynamic_measures.pickle'),
-                     'rb'))
-            if len(dynamic_measures.keys()) != nnetwork_keys:
-                raise ValueError('Inconsistent number of networks for ' +
-                                 'subject %s. In nnetwork_keys: %d. In pickle: %d.' %
-                                 (healthy_subject, nnetwork_keys,
-                                  len(dynamic_measures.keys())))
-            mean_synchrony = {key: dynamic_measures[key]['mean_synchrony'] \
-                              for key in range(nnetwork_keys)}
-
-            # Calculate the optimal k for each subject's network.
-            for network in range(nnetwork_keys):
-                nregions = mean_synchrony[network].shape[0]
-                indices = np.tril_indices(nregions)
-                indices = zip(indices[0], indices[1])
-                healthy_k_optima[network].append(
-                    calculate_optimal_k(mean_synchrony[network], indices))
-
-        # Find optimal mean of healthy subjects.
-        k_optima = {}
-        for network in range(nnetwork_keys):
-            k_optima[network] = np.mean(healthy_k_optima[network])
-
-        print ('Optimal mean threshold:')
-        for network in range(nnetwork_keys):
-            print('Network %d: %3f' % (network, k_optima[network]))
+        # Compute optimal threshold.
+        # Note: subjects's id are hardcoded inside this function so that this subjects
+        #       are not used for further analysis.
+        k_optima = calculate_healthy_optimal_k(input_basepath, output_basepath, network_type, window_size, window_type)
 
     # Calculate the Shannon entropy measures for every subject.
     for subject in subjects:
@@ -597,15 +613,15 @@ def data_analysis(subjects,
             kmeans_bold_labels = kmeans_bold.labels_
 
             # Calculate Shannon Entropy.
-            bold_shannon_entropy['bold_h'], bold_shannon_entropy['s2'], \
-            bold_shannon_entropy['n_labels_bold'], \
-            bold_shannon_entropy['n_classes_bold'] = shannon_entropy(kmeans_bold_labels)
+            bold_shannon_entropy['entropy'] = entropy(kmeans_bold_labels)
             save_path = os.path.join(subject_path, 'nclusters_%d' % (nclusters))
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             pickle.dump(bold_shannon_entropy,
                         open(os.path.join(save_path, 'bold_shannon.pickle'),
                              'wb'))
+            print('Done!')
+            print ('--------------------------------------------------------------')
         else:
             # This first part of the code is common to the synchrony and graph
             # analysis data analysis types.
@@ -614,10 +630,12 @@ def data_analysis(subjects,
             dynamic_measures = pickle.load(
                 open(os.path.join(subject_path, 'dynamic_measures.pickle'),
                      'rb'))
+            nnetwork_keys = check_number_networks(subjects, input_basepath, network_type)
+
             if len(dynamic_measures.keys()) != nnetwork_keys:
                 raise ValueError('Inconsistent number of networks for ' +
                                  'subject %s. In nnetwork_keys: %d. In pickle: %d.' %
-                                 (healthy_subject, nnetwork_keys,
+                                 (subject, nnetwork_keys,
                                   len(dynamic_measures.keys())))
             synchrony = {key: dynamic_measures[key]['synchrony'] \
                          for key in range(nnetwork_keys)}
@@ -654,18 +672,12 @@ def data_analysis(subjects,
                     kmeans = KMeans(n_clusters=nclusters)
                     kmeans.fit_transform(synchrony_bin_flat)
                     kmeans_labels = kmeans.labels_
-                    synchrony_h, \
-                    s2, \
-                    n_labels_syn, \
-                    n_classes_syn = shannon_entropy(kmeans_labels)
+                    synchrony_entropy = entropy(kmeans_labels)
 
                     # Save the results.
                     shannon_entropy_measures[network] = {
                         'centroids': kmeans.cluster_centers_,
-                        'synchrony_h': synchrony_h,
-                        's2': s2,
-                        'n_labels_syn': n_labels_syn,
-                        'n_classes_syn': n_classes_syn
+                        'entropy': synchrony_entropy
                     }
 
                 # Dump the results in a pickle file.
@@ -784,11 +796,7 @@ def data_analysis(subjects,
 
                         # Save the results in the measure-specific dictionary.
                         measures['labels'] = kmeans.labels_
-                        measures['entropy'], \
-                        measures['s2'], \
-                        measures['n_labels_gm'], \
-                        measures['n_classes_gm'] = \
-                            shannon_entropy(graph_theory_measures[network][measure])
+                        measures['entropy'] = entropy(graph_theory_measures[network][measure])
 
                 # Dump results into two pickle files.
                 save_path = os.path.join(subject_path,
