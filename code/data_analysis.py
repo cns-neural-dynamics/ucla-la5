@@ -535,10 +535,7 @@ def data_analysis(subjects,
                   window_type,
                   data_analysis_type,
                   nclusters,
-                  rand_ind,
-                  graph_analysis=True, # FIXME
-                  window_size=5, # FIXME specify as input parameter
-                  n_time_points=184):
+                  rand_ind):
     ''' Compute the main analysis. This function calculates the synchrony,
     metastability and perform the graph analysis.
 
@@ -567,6 +564,7 @@ def data_analysis(subjects,
         raise ValueError('The BOLD data analysis only works with ' +
                          'full_network networks.')
 
+    window_size = 5
     calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type)
     # Calculate the optimal k from the healthy subjects only.
     # Note: This is not needed with the BOLD data analysis. The optimal k will
