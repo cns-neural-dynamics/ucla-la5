@@ -679,7 +679,7 @@ def data_analysis(subjects,
                 if not os.path.exists(save_path):
                     os.makedirs(save_path)
                 pickle.dump(shannon_entropy_measures,
-                            open(os.path.join(subject_path,
+                            open(os.path.join(save_path,
                                               'synchrony_shannon_entropy_measures.pickle'),
                                  'wb'))
             elif data_analysis_type == 'graph_analysis':
