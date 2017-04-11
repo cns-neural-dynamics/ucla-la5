@@ -716,67 +716,6 @@ def data_analysis(subjects,
                         # weight over all regions.
                         for roi in range(nregions):
                             weight[t, roi] = np.average(w[:, roi, t])
-
-                        # Small-worldness
-                        # ------------------
-                        ncomponents = clustering.number_of_components(
-                            synchrony_bins[network][:, :, t])
-                        components = range(1, ncomponents + 1)
-                        regions2component_mapping = clustering.get_components(
-                            synchrony_bins[network][:, :, t])[0]
-                        regions_per_component = np.bincount(regions2component_mapping)
-
-                        # TODO:
-                        # 1. Pick component with highest number of regions in it, for this timepoint.
-                        # 2. Save the regions belonging to the component in (1.) for this timepoint.
-                        # 3. Delete all the code below here.
-                        # 4. After the loop we are into right now, add code to intersect all the sets
-                        #    (as many as the ntpoints). The intersections gives you the maximum common
-                        #    "divisor" (MCD) for the network.
-                        # 5. After the loop we are into right now, add an additional loop over ntpoints
-                        #    to compute sm, ds for each timepoint for the regions in said MCD.
-
-                        # Eliminate all components that only have one region.
-                        synchrony_bin_sw = synchrony_bins[network]
-                        components_to_delete = []
-                        for component in components:
-                            if regions_per_component[component] == 1:
-                                indices_to_eliminate = np.where(
-                                    regions2component_mapping == component)[0][0]
-                                print('Node %d was eliminated at timepoint %d' %
-                                      (indices_to_eliminate, t))
-                                synchrony_bin_sw = np.delete(
-                                    np.delete(synchrony_bin_sw[:, :, t],
-                                              indices_to_eliminate, 0),
-                                    indices_to_eliminate, 1)
-                                components_to_delete.append(component)
-                        components = list(set(components) -
-                                          set(components_to_delete))
-
-                        # Calculate the small-worldness for each remaining
-                        # component.
-                        SM[component] = np.zeros((ntpoints, nregions))
-                        Ds[component] = np.zeros((ntpoints, nregions * nregions))
-                        for component in components:
-                            # Select the portion of the synchrony bin containing
-                            # only the regions for this component.
-                            # TODO: Use slicing directly.
-                            indices_to_keep = np.where(regions2component_mapping == component)[0]
-                            all_indices = range(nregions)
-                            indices_to_eliminate = np.delete(all_indices,
-                                                             indices_to_keep, 0)
-                            synchrony_bin_component = np.delete(
-                                np.delete(synchrony_bin_sw[:, :, t],
-                                          indices_to_eliminate, 0),
-                                indices_to_eliminate, 1)
-
-                            # Compute the small worldness for this component.
-                            sm, ds = estimate_small_wordness(
-                                synchrony_bin_component[:, :], rand_ind)
-                            SM[component][t, :] = sm
-                            Ds[component][t, :] = np.ndarrary.flatten(ds)
-
-                    # Save results to a dictionary.
                     graph_theory_measures[network]['weight'] = weight
                     graph_theory_measures[network]['SM'] = SM
                     graph_theory_measures[network]['Ds'] = Ds
