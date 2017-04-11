@@ -1,5 +1,5 @@
-#!/share/apps/anaconda/bin/python
 from __future__ import division
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -11,210 +11,241 @@ import itertools
 from scipy import stats
 from math import log, sqrt
 
+def hutcheson_test(H1, H2, s21, s22, nlabels):
+    """ This function is defined in accordance to the hutchenson test to
+    calculate the p-values. This function assumes that a two-sided analysis
+    is being considered"""
+    # as it does not matter if the t-value is negative or postive, we here
+    # use the abs of the t-statistic. A negative t-statistic tells you that
+    # the observed mean is smaller then the hypothesised value. (This is
+    # only valid for a two sided statistic analysis)
+    t = abs((H1 - H2) / float(sqrt(s21 + s22)))
+    df = ((s21 + s22) **2) / (((s21 ** 2) / float(nlabels)) + ((s22 ** 2) /
+                                                               float(nlabels)))
+    # because I am assuming that this function wil only deal with two tailed
+    # distributions the resulting p-value is multiplied by two.
+    # check if df is bigger then 1 (it should always be)
+    p = stats.t.sf(t, df) * 2
+    return t, df, p
 
-def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
-        rand_ind, analysis_type, statistics_type, network_comp, significancy=.05):
+def group_analysis_subject_basepath(basepath,
+                                    network_type,
+                                    window_type,
+                                    subject):
+    return os.path.join(basepath, network_type, window_type, subject)
 
-    def hutcheson_test(H1, H2, s21, s22, n_labels,counts):
-        """ This function is defined in accordance to the hutchenson test to
-        calculate the p-values. This function assumes that a two-sided analysis
-        is being considered"""
-        # as it does not matter if the t-value is negative or postive, we here
-        # use the abs of the t-statistic. A negative t-statistic tells you that
-        # the observed mean is smaller then the hypothesised value. (This is
-        # only valid for a two sided statistic analysis)
-        t = abs((H1 - H2) / float(sqrt(s21 + s22)))
-        df = ((s21 + s22) **2) / ( ((s21 ** 2) / float(n_labels)) + ((s22 ** 2) /
-                float(n_labels)) )
-        # because I am assuming that this function wil only deal with two tailed
-        # distributions the resulting p-value is multiplied by two.
-        p = stats.t.sf(t, df) * 2
-        return t, df, p
-# check if df is bigger then 1 (it should always be)
+def group_analysis_group_basepath(basepath,
+                                  network_type,
+                                  window_type):
+    return os.path.join(basepath, network_type, window_type)
 
-    # create folder wehere results will be stored
-    if not os.path.isdir(os.path.join(base_path, network_comp, 'rand_ind_%02d' %rand_ind, 'group_comparison', '%02d_clusters' %n_cluster)):
-        os.makedirs(os.path.join(base_path, network_comp, 'rand_ind_%02d' %rand_ind, 'group_comparison', '%02d_clusters' %n_cluster))
+def group_analysis_pairwise(subjects,
+                            input_basepath,
+                            output_basepath,
+                            network_type,
+                            window_type,
+                            data_analysis_type,
+                            group_analysis_type,
+                            nclusters,
+                            rand_ind,
+                            significancy=.05): # FIXME: Define this in code, not as input.
 
-    if analysis_type == 'graph_analysis':
-        g1 = {'degree_centrality_h': [],
-             'path_distance_h': [],
-             'small_wordness_h': [],
-             'weight_h': [],
-             'degree_centralitys2': [],
-             'path_distances2': [],
-             'small_wordnesss2': [],
-             'weights2': []}
+    # Parameters of interest for the different data analysis types.
+    if data_analysis_type == 'graph_analysis':
+        parameters = []
+    elif data_analysis_type == 'synchrony':
+        parameters = ['entropy']
+    elif data_analysis_type == 'BOLD':
+        parameters = []
 
-        g2 = {'degree_centrality_h': [],
-             'path_distance_h': [],
-             'small_wordness_h': [],
-             'weight_h': [],
-             'degree_centralitys2': [],
-             'path_distances2': [],
-             'small_wordnesss2': [],
-             'weights2': []}
+    # Generate the output folders.
+    group_path = group_analysis_group_basepath(output_basepath,
+                                               network_type,
+                                               window_type)
+    if data_analysis_type == 'graph_analysis':
+        group_path = os.path.join(group_path,
+                                  'nclusters_%s' % nclusters,
+                                  'rand_ind_%d' % rand_ind)
+    elif data_analysis_type == 'synchrony':
+        group_path = os.path.join(group_path,
+                                  'nclusters_%s' % nclusters)
+    elif data_analysis_type == 'BOLD':
+        group_path = os.path.join(group_path,
+                                  'nclusters_%s' % nclusters)
+    if not os.path.isdir(group_path):
+        os.makedirs(group_path)
 
-    elif analysis_type == 'synchrony':
-        g1 = {'synchrony_h': [], 's2': []}
-        g2 = {'synchrony_h': [], 's2': []}
+    # Aggregate input measures for all subjects in just 2 groups.
+    healthy_parameters = {}
+    schizo_parameters = {}
+    for subject in subjects:
+        # Extract the input data.
+        subject_basepath = group_analysis_subject_basepath(input_basepath,
+                                                           network_type,
+                                                           window_type,
+                                                           subject)
+        if data_analysis_type == 'graph_analysis':
+            data_filepath = os.path.join(subject_basepath,
+                                         'nclusters_%s' % nclusters,
+                                         'rand_ind_%d' % rand_ind,
+                                         'graph_analysis_shannon_entropy_measures.pickle')
+        elif data_analysis_type == 'synchrony':
+            data_filepath = os.path.join(subject_basepath,
+                                         'nclusters_%s' % nclusters,
+                                         'synchrony_shannon_entropy_measures.pickle')
+        elif data_analysis_type == 'BOLD':
+            data_filepath = os.path.join(subject_basepath,
+                                         'nclusters_%s' % nclusters,
+                                         'bold_shannon.pickle')
+        data = pickle.load(open(data_filepath, 'rb'))
 
-    elif analysis_type == 'BOLD':
-        g1 = {'bold_h': [], 's2': []}
-        g2 = {'bold_h': [], 's2': []}
+        # Aggregate all data by measure and by healthy/schiophrenic subjects.
+        for network in data:
+            if int(subject.strip('sub-')) < 40000:
+                if network not in healthy_parameters:
+                    healthy_parameters[network] = {}
+                for parameter in parameters:
+                    if parameter not in healthy_parameters[network]:
+                        healthy_parameters[network][parameter] = []
+                    healthy_parameters[network][parameter].append(data[network][parameter])
+            elif int(subject.strip('sub-')) > 50000:
+                if network not in schizo_parameters:
+                    schizo_parameters[network] = {}
+                for parameter in parameters:
+                    if parameter not in schizo_parameters[network]:
+                        schizo_parameters[network][parameter] = []
+                    schizo_parameters[network][parameter].append(data[network][parameter])
+            else:
+                 raise ValueError('Unexpected subject ID: %s.' % (subject))
 
-    else:
-        raise ValueError('The analysis type was passed incorrectly')
+    # Generate the results dictionary.
+    results = {}
+    for network in data:
+        results[network] = {}
+        if data_analysis_type == 'synchrony':
+            for measures in [healthy_parameters, schizo_parameters]:
+                for parameter in parameters:
+                    if parameter not in results[network]:
+                        results[network][parameter] = []
+                    results[network][parameter].append(np.mean(measures[network][parameter]))
+                    if parameter + '_std' not in results[network]:
+                        results[network][parameter + '_std'] = []
+                    results[network][parameter + '_std'].append(np.std(measures[network][parameter]))
+                # FIXME: Shall this be deleted?
+                # if group_analysis_type == 'hutchenson':
+                #     results['s2'].append(np.mean(g_i['s2']))
+
+            # Save all entropy values into a CSV file, just because.
+            entropy_filepath = os.path.join(group_path,
+                                            'synchrony_entropy_network_%d.csv' %
+                                            (network))
+            entropy = {
+                'Healthy': healthy_parameters[network]['entropy'],
+                'Schizo': schizo_parameters[network]['entropy']
+            }
+            with open(entropy_filepath, 'wb') as outfile:
+                writer = csv.writer(outfile)
+                writer.writerow(entropy.keys())
+                writer.writerows(itertools.izip_longest(*entropy.values()))
 
 
 
-    # load data for each subject and divide the calculated graph theory metrics
-    # according to the category the participants belong to
-    for subject_id in subjects_id:
-        if analysis_type == 'graph_analysis':
-            data_path = os.path.join(base_path, network_comp, 'rand_ind_%02d' %rand_ind,
-                '%s' %(subject_id), '%02d_clusters' %n_cluster, 'graph_measures_labels_shannon_%s.pickle' %subject_id)
-        elif analysis_type == 'synchrony':
-            data_path = os.path.join(base_path, network_comp, 'rand_ind_%02d' %rand_ind,
-                '%s' %(subject_id), '%02d_clusters' %n_cluster,
-                '%s_total_shannon_entropy.pickle' %subject_id)
-        elif analysis_type == 'BOLD':
-            data_path = os.path.join(base_path, network_comp, 'rand_ind_%02d' %rand_ind,
-                '%s' %(subject_id), '%02d_clusters' %n_cluster,
-                'bold_shannon_%s.pickle' %subject_id)
 
-        data = pickle.load(open(data_path, 'rb'))
-       # separate subjects according to their grups.
-       # g1: healthy controls
-       # g2: prodromals
-        if int(subject_id.strip('sub-')) < 40000:
-            # iterate over all keys on the dictionary
-            for key in g1:
-                g1[key].append(data[key])
-        elif int(subject_id.strip('sub-')) > 50000:
-            for key in g2:
-                g2[key].append(data[key])
-    groups = [g1, g2]
 
-    if analysis_type == 'graph_analysis':
-        # define which parameters are of interest
-        par = ['degree_centrality', 'small_wordness', 'path_distance', 'weight']
-        par_interest = ['degree_centrality_h', 'small_wordness_h',
-                'path_distance_h', 'weight_h']
-        s2_par = ['degree_centrality_s2', 'path_distance_s2',
-                'small_wordness_s2', 'weight_s2']
-        gm_std = ['degree_centrality_h_std', 'path_distance_h_std',
-                'small_wordness_h_std', 'weight_h_std']
-        n_labels = 'gm'
-        keys = []
-        # append all keys to the list of keys
-        for ii in range(len(par_interest)):
-            keys.extend([par_interest[ii], s2_par[ii], gm_std[ii]])
 
-        value = []
-        # generate dictionary
-        results = {key: list(value) for key in keys}
+        # TODO
+        elif data_analysis_type == 'graph_analysis':
+            # define which parameters are of interest
+            par = ['degree_centrality', 'small_wordness', 'path_distance', 'weight']
+            parameters = ['degree_centrality_h', 'small_wordness_h',
+                    'path_distance_h', 'weight_h']
+            s2_par = ['degree_centrality_s2', 'path_distance_s2',
+                    'small_wordness_s2', 'weight_s2']
+            gm_std = ['degree_centrality_h_std', 'path_distance_h_std',
+                    'small_wordness_h_std', 'weight_h_std']
+            n_labels = 'gm'
+            keys = []
+            # append all keys to the list of keys
+            for ii in range(len(parameters)):
+                keys.extend([parameters[ii], s2_par[ii], gm_std[ii]])
 
-        for index in range(n_groups):
-            g_i = groups[index]
-            # select all elements in s2_par
-            ii = 0
+            value = []
+            # generate dictionary
+            results = {key: list(value) for key in keys}
+
+            for index in range(ngroups):
+                g_i = groups[index]
+                # select all elements in s2_par
+                ii = 0
+                for key in par:
+                    results[key + '_h'].append(np.mean (g_i[key + '_h']))
+                    results[key + '_h_std'].append(np.std(g_i[key + '_h']))
+                    if group_analysis_type == 'hutchenson':
+                        results[key + '_s2'].append(np.mean(g_i[key + 's2']))
+
+            # save value for each key into a dictionary which will be used
+            # afterwards for saving the values
+            g_all = {}
             for key in par:
-                results[key + '_h'].append(np.mean (g_i[key + '_h']))
-                results[key + '_h_std'].append(np.std(g_i[key + '_h']))
-                if statistics_type == 'hutchenson':
-                    results[key + '_s2'].append(np.mean(g_i[key + 's2']))
+                g_temp = {'g1_%s'%(key + '_h'): g1[key + '_h'],
+                          'g2_%s'%(key + '_h'): g2[key + '_h'],
+                          }
+                g_all.update(g_temp)
+            # itertools allow dictionary entries to have different sizes
+            with open('gm_entropy.csv', 'wb') as outfile:
+                writer = csv.writer(outfile)
+                writer.writerow(g_all.keys())
+                writer.writerows(itertools.izip_longest(*g_all.values()))
 
-        # save value for each key into a dictionary which will be used
-        # afterwards for saving the values
-        g_all = {}
-        for key in par:
-            g_temp = {'g1_%s'%(key + '_h'): g1[key + '_h'],
-                      'g2_%s'%(key + '_h'): g2[key + '_h'],
-                      }
-            g_all.update(g_temp)
-        # itertools allow dictionary entries to have different sizes
-        with open('gm_entropy.csv', 'wb') as outfile:
-            writer = csv.writer(outfile)
-            writer.writerow(g_all.keys())
-            writer.writerows(itertools.izip_longest(*g_all.values()))
+        elif data_analysis_type == 'BOLD':
+            parameters = ['bold_h']
+            s2_par = ['s2']
+            n_labels ='bold'
+            keys = [parameters[0], s2_par[0], 'bold_h_std']
+            value = []
+            # generate dictionary
+            results = {key: list(value) for key in keys}
 
-    elif analysis_type == 'synchrony':
-        par_interest =  ['synchrony_h']
-        s2_par = ['s2']
-        n_labels = 'syn'
-        keys = [par_interest[0], s2_par[0], 'synchrony_h_std']
-        value = []
-        # generate dictionary
-        results = {key: list(value) for key in keys}
+            for index in range(ngroups):
+                g_i = groups[index]
+                # select all elements in s2_par
+                for key in parameters:
+                    results[key].append(np.mean(g_i[key]))
+                    results[key + '_std'].append(np.std(g_i[key]))
+                if group_analysis_type == 'hutchenson':
+                    results['s2'].append(np.mean(g_i['s2']))
 
-        for index in range(n_groups):
-            g_i = groups[index]
-            # select all elements in s2_par
-            for key in par_interest:
-                results[key].append(np.mean(g_i[key]))
-                results[key + '_std'].append(np.std(g_i[key]))
-            if statistics_type == 'hutchenson':
-                results['s2'].append(np.mean(g_i['s2']))
-
-        # save all entropy values into a csv file
-        g_all = {'g1': g1[par_interest[0]], 'g2': g2[par_interest[0]]}
-
-        # itertools allow dictionary entries to have different sizes
-        with open('synchrony_entropy.csv', 'wb') as outfile:
-            writer = csv.writer(outfile)
-            writer.writerow(g_all.keys())
-            writer.writerows(itertools.izip_longest(*g_all.values()))
-
-    elif analysis_type == 'BOLD':
-        par_interest = ['bold_h']
-        s2_par = ['s2']
-        n_labels ='bold'
-        keys = [par_interest[0], s2_par[0], 'bold_h_std']
-        value = []
-        # generate dictionary
-        results = {key: list(value) for key in keys}
-
-        for index in range(n_groups):
-            g_i = groups[index]
-            # select all elements in s2_par
-            for key in par_interest:
-                results[key].append(np.mean(g_i[key]))
-                results[key + '_std'].append(np.std(g_i[key]))
-            if statistics_type == 'hutchenson':
-                results['s2'].append(np.mean(g_i['s2']))
-
-        # save all entropy values into a csv file
-        g_all = {'g1': g1[par_interest[0]], 'g2': g2[par_interest[0]]}
-        # itertools allow dictionary entries to have different sizes
-        with open('bold_entropy.csv', 'wb') as outfile:
-            writer = csv.writer(outfile)
-            writer.writerow(g_all.keys())
-            writer.writerows(itertools.izip_longest(*g_all.values()))
+            # save all entropy values into a csv file
+            g_all = {'g1': g1[parameters[0]], 'g2': g2[parameters[0]]}
+            # itertools allow dictionary entries to have different sizes
+            with open('bold_entropy.csv', 'wb') as outfile:
+                writer = csv.writer(outfile)
+                writer.writerow(g_all.keys())
+                writer.writerows(itertools.izip_longest(*g_all.values()))
 
              # find significant difference between categories
     res = {}
-    for ii in range(len(par_interest)):
+    for ii in range(len(parameters)):
         # qplot = stats.probplot(g1[key], plot=plt)
         # plt.savefig('plot.png')
         # pdb.set_trace()
-        if statistics_type == 'hutchenson':
+        if group_analysis_type == 'hutchenson':
             # use Hutcheson t-test
             # as thecnumber of cluster is the same for both groups (it was
             # defined using k-means) and the number of labels is defined by the
             # temporal resolution of date -- which agin is the same for both
             # groups -- are passed only once to the function
-            t12, df12, p12 = hutcheson_test(results[par_interest[ii]][0], results[par_interest[ii]][1],
+            t12, df12, p12 = hutcheson_test(results[parameters[ii]][0], results[parameters[ii]][1],
                                             results[s2_par[ii]][0],       results[s2_par[ii]][1],
                                             data['n_labels_'  + n_labels ],
                                             data['n_classes_' + n_labels])
 
-        elif statistics_type == 'ttest':
-            t12, p12 = stats.ttest_ind(g1[par_interest[ii]], g2[par_interest[ii]])
+        elif group_analysis_type == 'ttest':
+            t12, p12 = stats.ttest_ind(g1[parameters[ii]], g2[parameters[ii]])
 
-        if statistics_type == 'ttest' or statistics_type == 'hutchenson':
+        if group_analysis_type == 'ttest' or group_analysis_type == 'hutchenson':
             # Print results
-            print('num clusters: %02d' %n_cluster)
+            print('num clusters: %02d' % nclusters)
             print('p and t-value for difference between HC and PD')
             print(p12,t12)
 
@@ -228,9 +259,9 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
     # Plot Graph Theory Parameteres
     #------------------------------------------------------------------------------
     print('-----------------------------------------------------------------------')
-    ind = np.arange(n_groups)
+    ind = np.arange(ngroups)
     width = 0.7
-    if analysis_type == 'graph_analysis':
+    if data_analysis_type == 'graph_analysis':
         parameters = [results['degree_centrality_h'],
                       results['small_wordness_h'],
                       results['path_distance_h'],
@@ -245,28 +276,28 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
                results['path_distance_h'],
                results['weight_h'])
 
-    elif analysis_type == 'synchrony':
+    elif data_analysis_type == 'synchrony':
         parameters = results['synchrony_h']
         parameters_s = ['Synchrony']
         parameters_std = results['synchrony_h_std']
         print ('mean synchrony: %s') % str(results['synchrony_h']).strip('[]')
         print ('synchrony std : %s') % str(results['synchrony_h_std']).strip('[]')
 
-    elif analysis_type == 'BOLD':
+    elif data_analysis_type == 'BOLD':
         parameters = results['bold_h']
         parameters_s = ['BOLD correlation']
         parameters_std = results['bold_h_std']
         print ('mean bold: %s') % str(results['bold_h']).strip('[]')
         print ('bold std : %s') % str(results['bold_h_std']).strip('[]')
 
-    if analysis_type == 'synchrony' or analysis_type == 'BOLD':
+    if data_analysis_type == 'synchrony' or data_analysis_type == 'BOLD':
         print('plotting and saving %s' %parameters_s)
         fig, ax = plt.subplots()
         ax.bar(ind, parameters, width, yerr=parameters_std,
             ecolor='black', # black error bar
             alpha=0.5,      # transparency
             align='center')
-    elif analysis_type == 'graph_theory':
+    elif data_analysis_type == 'graph_theory':
             print('plotting and saving %s' %parameters_s[element])
             fig, ax = plt.subplots()
             ax.bar(ind, parameters[element], width, yerr=parameters_std[element],
@@ -276,7 +307,7 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
     for element in range(len(parameters_s)):
         ax.set_xticklabels(('HC', 'SC'))
         # set height of the y-axis
-        if analysis_type == 'BOLD':
+        if data_analysis_type == 'BOLD':
             max_y = .4
         else:
             max_y = 5
@@ -303,7 +334,7 @@ def group_analysis_pairwise(subjects_id, n_cluster, n_groups, base_path,
         # increase font size
         plt.rcParams.update({'font.size': 28})
         plt.tight_layout()
-        plt.savefig(os.path.join(base_path, network_comp, 'rand_ind_%02d' %rand_ind,
-            'group_comparison', '%02d_clusters' %n_cluster,
-            ''.join([parameters_s[element], '_%s.png' %statistics_type])))
+        plt.savefig(os.path.join(output_basepath, network_type, 'rand_ind_%02d' % rand_ind,
+            'group_comparison', '%02d_clusters' % nclusters,
+            ''.join([parameters_s[element], '_%s.png' % group_analysis_type])))
         plt.close('all')
