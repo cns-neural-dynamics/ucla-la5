@@ -36,7 +36,7 @@ roi_input_network_filename = os.path.join(base_path, 'data_in', 'voi_extraction'
 roi_output_basepath = os.path.join(base_path, 'data_out', 'extract_roi')
 
 # Data analysis
-data_analysis_input_basepath = os.path.join(base_path, 'data_out', 'extract_roi')
+data_analysis_input_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'extract_roi')
 data_analysis_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'data_analysis')
 
 # Group data analysis
