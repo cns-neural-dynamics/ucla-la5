@@ -15,7 +15,7 @@ from nitime.analysis import FilterAnalyzer
 from scipy.signal import hilbert
 from scipy.stats import entropy
 from bct import (degrees_und, distance_bin, transitivity_bu, clustering_coef_bu,
-                 randmio_und_connected, charpath, clustering)
+                 randmio_und_connected, charpath, clustering, breadthdist, efficiency_bin)
 from sklearn.cluster import KMeans
 
 
@@ -505,11 +505,6 @@ def estimate_small_wordness(synchrony_bin, rand_ind):
     return SM, Ds
 
 
-
-
-# return n_classes instead
-
-
 def bold_plot_threshold(data, n_regions, threshold=1.3):
     """ This function thresholds the BOLD activity using the passed threshold  """
     # Calculate states on raw BOLD data
@@ -697,35 +692,58 @@ def data_analysis(subjects,
                     ntpoints = synchrony_bins[network].shape[2]
                     graph_theory_measures[network] = {}
 
+                    # Note: Because K-means will be performed over time and of the way
+                    #  the data is defined all measures will need to transposed.
                     # Degree centrality:
                     # -------------------
-                    degree_centrality = np.transpose(
-                        degrees_und(synchrony_bins[network]))
+                    # Number of links connected to each node
+                    degree_centrality = degrees_und(synchrony_bins[network])
                     graph_theory_measures[network]['degree_centrality'] = \
-                        degree_centrality
+                        np.transpose(degree_centrality)
 
-                    # Iterate over time to obtain different network measurements.
+                    # Cluster Coefficient:
+                    # ----------------------
+                    # Calculate cluster Coefficient at each time point.
+                    cluster_coefficient = np.zeros((nregions, ntpoints))
+                    for t in range(ntpoints):
+                        cluster_coefficient[:, t] = clustering_coef_bu(synchrony_bins[network][:, :, t])
+                    graph_theory_measures[network]['cluster_coefficient'] = np.transpose(cluster_coefficient)
+
+
+                    # # Shortest path length:
+                    # # ----------------------
+                    # # Calculate the shortest path length between all nodes. The matrix for eacht time point
+                    # # is flattened.
+                    # shortest_path = np.zeros((nregions * nregions, ntpoints))
+                    # for t in range(ntpoints):
+                    #     _, tmp_shortest_path = breadthdist(synchrony_bins[network][:, :, t])
+                    #     shortest_path[:, t] = tmp_shortest_path.flatten()
+                    # graph_theory_measures[network]['shortest_path'] = np.transpose(shortest_path)
+
+                    # Global efficiency
+                    # ----------------------
+                    # Returns only a float. For comparision between groups the standard deviation will
+                    # be used.
+                    networks_global_efficiency = {}
+                    global_efficiency = np.zeros(ntpoints)
+                    for t in range(ntpoints):
+                        global_efficiency[t] = efficiency_bin(synchrony_bins[network][:, :, t])
+                    networks_global_efficiency[network] = global_efficiency
+
+                    # Weight
+                    # -------------------
                     weight = np.zeros((ntpoints, nregions))
                     w = np.multiply(synchrony[network], synchrony_bins[network])
-                    SM = {}
-                    Ds = {}
                     for t in range(ntpoints):
-                        # Weight
-                        # -------------------
-                        # Use the thresholded matrix to calculate the average
-                        # weight over all regions.
                         for roi in range(nregions):
                             weight[t, roi] = np.average(w[:, roi, t])
                     graph_theory_measures[network]['weight'] = weight
-                    graph_theory_measures[network]['SM'] = SM
-                    graph_theory_measures[network]['Ds'] = Ds
 
                     # Perform K-means and calculate Shannon Entropy for each
                     # graph theory measurement.
-                    # TODO: think how you want to transform SM and DM into one
-                    # single matrix.
                     kmeans = KMeans(n_clusters=nclusters)
                     shannon_entropy_measures[network] = {}
+                    # Select only keys that will be used on the analysis
                     for measure in graph_theory_measures[network]:
                         shannon_entropy_measures[network][measure] = {}
                         measures = shannon_entropy_measures[network][measure]
@@ -737,7 +755,8 @@ def data_analysis(subjects,
                         measures['labels'] = kmeans.labels_
                         measures['entropy'] = entropy(graph_theory_measures[network][measure])
 
-                # Dump results into two pickle files.
+
+                # Dump results into three pickle files.
                 save_path = os.path.join(subject_path,
                                          'nclusters_%d' % (nclusters),
                                          'rand_ind_%d' % (rand_ind))
@@ -750,6 +769,10 @@ def data_analysis(subjects,
                 pickle.dump(shannon_entropy_measures,
                             open(os.path.join(save_path,
                                               'graph_analysis_shannon_entropy_measures.pickle'),
+                                 'wb'))
+                pickle.dump(networks_global_efficiency,
+                            open(os.path.join(save_path,
+                                              'global_efficiency.pickle'),
                                  'wb'))
             else:
                 raise ValueError('Unrecognised data analysis type: %s' %
