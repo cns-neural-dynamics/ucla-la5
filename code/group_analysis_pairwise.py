@@ -11,19 +11,6 @@ import itertools
 from scipy import stats
 from math import log, sqrt
 
-def hutcheson_test(H1, H2, s21, s22, nlabels):
-    """ This function is defined in accordance to the hutchenson test to
-    calculate the p-values. This function assumes that a two-sided analysis
-    is being considered"""
-    # FIXME: calculate s2 based on the formula on Marxico
-    t = abs((H1 - H2) / float(sqrt(s21 + s22)))
-    df = ((s21 + s22) **2) / (((s21 ** 2) / float(nlabels)) + ((s22 ** 2) /
-                                                               float(nlabels)))
-    # because I am assuming that this function wil only deal with two tailed
-    # distributions the resulting p-value is multiplied by two.
-    # check if df is bigger then 1 (it should always be)
-    p = stats.t.sf(t, df) * 2
-    return t, df, p
 
 def group_analysis_subject_basepath(basepath,
                                     network_type,
@@ -136,9 +123,6 @@ def group_analysis_pairwise(subjects,
                     if parameter + '_std' not in results[network][measure]:
                         results[network][measure][parameter + '_std'] = []
                     results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
-                    # re-implement for hutchenson
-                    # if group_analysis_type == 'hutchenson':
-                    #     results['s2'].append(np.mean(g_i['s2']))
 
             # Save all entropy values into a CSV file, just because.
             entropy_filepath = os.path.join(group_path,
@@ -204,9 +188,6 @@ def group_analysis_pairwise(subjects,
                     if parameter + '_std' not in results[network][measure]:
                         results[network][measure][parameter + '_std'] = []
                     results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
-                    # re-implement for hutchenson
-                    # if group_analysis_type == 'hutchenson':
-                    #     results['s2'].append(np.mean(g_i['s2']))
 
 
     res = {}
@@ -214,21 +195,9 @@ def group_analysis_pairwise(subjects,
         # qplot = stats.probplot(g1[key], plot=plt)
         # plt.savefig('plot.png')
         # pdb.set_trace()
-        if group_analysis_type == 'hutchenson':
-            # use Hutcheson t-test
-            # as thecnumber of cluster is the same for both groups (it was
-            # defined using k-means) and the number of labels is defined by the
-            # temporal resolution of date -- which agin is the same for both
-            # groups -- are passed only once to the function
-            t12, df12, p12 = hutcheson_test(results[parameters[ii]][0], results[parameters[ii]][1],
-                                            results[s2_par[ii]][0],       results[s2_par[ii]][1],
-                                            data['n_labels_'  + n_labels ],
-                                            data['n_classes_' + n_labels])
 
-        elif group_analysis_type == 'ttest':
+        if group_analysis_type == 'ttest':
             t12, p12 = stats.ttest_ind(g1[parameters[ii]], g2[parameters[ii]])
-
-        if group_analysis_type == 'ttest' or group_analysis_type == 'hutchenson':
             # Print results
             print('num clusters: %02d' % nclusters)
             print('p and t-value for difference between HC and PD')
