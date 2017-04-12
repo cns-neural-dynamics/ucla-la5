@@ -602,13 +602,14 @@ def data_analysis(subjects,
             # Perfom k-means on the BOLD signal.
             # Because BOLD only support one network and for compatibility with results.
             network = 0
-            bold_shannon_entropy = {network: {}}
+            measure = 'BOLD'
+            bold_shannon_entropy = {network: {measure: {}}}
             kmeans_bold = KMeans(n_clusters=nclusters)
             kmeans_bold.fit_transform(np.transpose(thr_data))
             kmeans_bold_labels = kmeans_bold.labels_
 
             # Calculate Shannon Entropy.
-            bold_shannon_entropy[network]['entropy'] = entropy(kmeans_bold_labels)
+            bold_shannon_entropy[network][measure]['entropy'] = entropy(kmeans_bold_labels)
             save_path = os.path.join(subject_path, 'nclusters_%d' % (nclusters))
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
@@ -653,6 +654,7 @@ def data_analysis(subjects,
 
             # The actual measures we save depend on the data analysis type.
             if data_analysis_type == 'synchrony':
+                measure = 'synchrony'
                 shannon_entropy_measures = {}
                 for network in range(nnetwork_keys):
                     # Flatten the synchrony bin for the current network.
@@ -670,7 +672,8 @@ def data_analysis(subjects,
                     synchrony_entropy = entropy(kmeans_labels)
 
                     # Save the results.
-                    shannon_entropy_measures[network] = {
+                    shannon_entropy_measures[network] = {}
+                    shannon_entropy_measures[network][measure] = {
                         'centroids': kmeans.cluster_centers_,
                         'entropy': synchrony_entropy
                     }
@@ -753,7 +756,7 @@ def data_analysis(subjects,
 
                         # Save the results in the measure-specific dictionary.
                         measures['labels'] = kmeans.labels_
-                        measures['entropy'] = entropy(graph_theory_measures[network][measure])
+                        measures['entropy'] = entropy(shannon_entropy_measures[network][measure]['labels'])
 
 
                 # Dump results into three pickle files.

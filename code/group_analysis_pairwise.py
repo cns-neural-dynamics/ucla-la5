@@ -49,11 +49,13 @@ def group_analysis_pairwise(subjects,
 
     # Parameters of interest for the different data analysis types.
     if data_analysis_type == 'graph_analysis':
-        parameters = []
+        measures = ['cluster_coefficient', 'degree_centrality', 'weight']
     elif data_analysis_type == 'synchrony':
-        parameters = ['entropy']
+        measures = ['synchrony']
     elif data_analysis_type == 'BOLD':
-        parameters = ['entropy']
+        measures = ['BOLD']
+    # All 3 analysis are comparing the entropy values betwen groups
+    parameters = ['entropy']
 
     # Generate the output folders.
     group_path = group_analysis_group_basepath(output_basepath,
@@ -72,7 +74,7 @@ def group_analysis_pairwise(subjects,
     if not os.path.isdir(group_path):
         os.makedirs(group_path)
 
-    # Aggregate input measures for all subjects in just 2 groups.
+    # Aggregate input  group for all subjects in just 2 groups.
     healthy_parameters = {}
     schizo_parameters = {}
     for subject in subjects:
@@ -101,17 +103,21 @@ def group_analysis_pairwise(subjects,
             if int(subject.strip('sub-')) < 40000:
                 if network not in healthy_parameters:
                     healthy_parameters[network] = {}
-                for parameter in parameters:
-                    if parameter not in healthy_parameters[network]:
-                        healthy_parameters[network][parameter] = []
-                    healthy_parameters[network][parameter].append(data[network][parameter])
+                for measure in measures:
+                    healthy_parameters[network][measure] = {}
+                    for parameter in parameters:
+                        if parameter not in healthy_parameters[network]:
+                            healthy_parameters[network][measure][parameter] = []
+                        healthy_parameters[network][measure][parameter].append(data[network][measure][parameter])
             elif int(subject.strip('sub-')) > 50000:
                 if network not in schizo_parameters:
                     schizo_parameters[network] = {}
-                for parameter in parameters:
-                    if parameter not in schizo_parameters[network]:
-                        schizo_parameters[network][parameter] = []
-                    schizo_parameters[network][parameter].append(data[network][parameter])
+                for measure in measures:
+                    schizo_parameters[network][measure] = {}
+                    for parameter in parameters:
+                        if parameter not in schizo_parameters[network]:
+                            schizo_parameters[network][measure][parameter] = []
+                        schizo_parameters[network][measure][parameter].append(data[network][measure][parameter])
             else:
                  raise ValueError('Unexpected subject ID: %s.' % (subject))
 
@@ -120,14 +126,16 @@ def group_analysis_pairwise(subjects,
     for network in data:
         results[network] = {}
         if data_analysis_type == 'synchrony':
-            for measures in [healthy_parameters, schizo_parameters]:
+            measure = 'synchrony'
+            results[network][measure] = {}
+            for group in [healthy_parameters, schizo_parameters]:
                 for parameter in parameters:
-                    if parameter not in results[network]:
-                        results[network][parameter] = []
-                    results[network][parameter].append(np.mean(measures[network][parameter]))
-                    if parameter + '_std' not in results[network]:
-                        results[network][parameter + '_std'] = []
-                    results[network][parameter + '_std'].append(np.std(measures[network][parameter]))
+                    if parameter not in results[network][measure]:
+                        results[network][measure][parameter] = []
+                    results[network][measure][parameter].append(np.mean(group[network][measure][parameter]))
+                    if parameter + '_std' not in results[network][measure]:
+                        results[network][measure][parameter + '_std'] = []
+                    results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
                     # re-implement for hutchenson
                     # if group_analysis_type == 'hutchenson':
                     #     results['s2'].append(np.mean(g_i['s2']))
@@ -137,28 +145,25 @@ def group_analysis_pairwise(subjects,
                                             'synchrony_entropy_network_%d.csv' %
                                             (network))
             entropy = {
-                'Healthy': healthy_parameters[network]['entropy'],
-                'Schizo': schizo_parameters[network]['entropy']
+                'Healthy': healthy_parameters[network][measure]['entropy'],
+                'Schizo': schizo_parameters[network][measure]['entropy']
             }
             with open(entropy_filepath, 'wb') as outfile:
                 writer = csv.writer(outfile)
                 writer.writerow(entropy.keys())
                 writer.writerows(itertools.izip_longest(*entropy.values()))
-        # TODO
         elif data_analysis_type == 'graph_analysis':
-            # define which parameters are of interest
-            par = ['degree_centrality', 'small_wordness', 'path_distance', 'weight']
-            parameters = ['degree_centrality_h', 'small_wordness_h',
-                    'path_distance_h', 'weight_h']
-            s2_par = ['degree_centrality_s2', 'path_distance_s2',
-                    'small_wordness_s2', 'weight_s2']
-            gm_std = ['degree_centrality_h_std', 'path_distance_h_std',
-                    'small_wordness_h_std', 'weight_h_std']
-            n_labels = 'gm'
-            keys = []
-            # append all keys to the list of keys
-            for ii in range(len(parameters)):
-                keys.extend([parameters[ii], s2_par[ii], gm_std[ii]])
+            results[network] = {}
+            for measure in measures:
+                results[network][measure] = {}
+                for group in [healthy_parameters, schizo_parameters]:
+                    for parameter in parameters:
+                        if parameter not in results[network][measure]:
+                            results[network][measure][parameter] = []
+                        results[network][measure][parameter].append(np.mean(group[network][measure][parameter]))
+                        if parameter + '_std' not in results[network][measure]:
+                            results[network][measure][parameter + '_std'] = []
+                        results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
 
             value = []
             # generate dictionary
@@ -189,14 +194,16 @@ def group_analysis_pairwise(subjects,
                 writer.writerows(itertools.izip_longest(*g_all.values()))
 
         elif data_analysis_type == 'BOLD':
-            for measures in [healthy_parameters, schizo_parameters]:
+            measure = 'BOLD'
+            results[network][measure] = {}
+            for group in [healthy_parameters, schizo_parameters]:
                 for parameter in parameters:
-                    if parameter not in results[network]:
-                        results[network][parameter] = []
-                    results[network][parameter].append(np.mean(measures[network][parameter]))
-                    if parameter + '_std' not in results[network]:
-                        results[network][parameter + '_std'] = []
-                    results[network][parameter + '_std'].append(np.std(measures[network][parameter]))
+                    if parameter not in results[network][measure]:
+                        results[network][measure][parameter] = []
+                    results[network][measure][parameter].append(np.mean(group[network][measure][parameter]))
+                    if parameter + '_std' not in results[network][measure]:
+                        results[network][measure][parameter + '_std'] = []
+                    results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
                     # re-implement for hutchenson
                     # if group_analysis_type == 'hutchenson':
                     #     results['s2'].append(np.mean(g_i['s2']))
