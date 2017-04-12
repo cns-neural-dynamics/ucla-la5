@@ -91,18 +91,20 @@ def group_analysis_pairwise(subjects,
                 if network not in healthy_parameters:
                     healthy_parameters[network] = {}
                 for measure in measures:
-                    healthy_parameters[network][measure] = {}
+                    if measure not in healthy_parameters[network]:
+                        healthy_parameters[network][measure] = {}
                     for parameter in parameters:
-                        if parameter not in healthy_parameters[network]:
+                        if parameter not in healthy_parameters[network][measure]:
                             healthy_parameters[network][measure][parameter] = []
                         healthy_parameters[network][measure][parameter].append(data[network][measure][parameter])
             elif int(subject.strip('sub-')) > 50000:
                 if network not in schizo_parameters:
                     schizo_parameters[network] = {}
                 for measure in measures:
-                    schizo_parameters[network][measure] = {}
+                    if measure not in schizo_parameters[network]:
+                        schizo_parameters[network][measure] = {}
                     for parameter in parameters:
-                        if parameter not in schizo_parameters[network]:
+                        if parameter not in schizo_parameters[network][measure]:
                             schizo_parameters[network][measure][parameter] = []
                         schizo_parameters[network][measure][parameter].append(data[network][measure][parameter])
             else:
@@ -149,33 +151,19 @@ def group_analysis_pairwise(subjects,
                             results[network][measure][parameter + '_std'] = []
                         results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
 
-            value = []
-            # generate dictionary
-            results = {key: list(value) for key in keys}
-
-            for index in range(ngroups):
-                g_i = groups[index]
-                # select all elements in s2_par
-                ii = 0
-                for key in par:
-                    results[key + '_h'].append(np.mean (g_i[key + '_h']))
-                    results[key + '_h_std'].append(np.std(g_i[key + '_h']))
-                    if group_analysis_type == 'hutchenson':
-                        results[key + '_s2'].append(np.mean(g_i[key + 's2']))
-
-            # save value for each key into a dictionary which will be used
-            # afterwards for saving the values
-            g_all = {}
-            for key in par:
-                g_temp = {'g1_%s'%(key + '_h'): g1[key + '_h'],
-                          'g2_%s'%(key + '_h'): g2[key + '_h'],
-                          }
-                g_all.update(g_temp)
-            # itertools allow dictionary entries to have different sizes
-            with open('gm_entropy.csv', 'wb') as outfile:
-                writer = csv.writer(outfile)
-                writer.writerow(g_all.keys())
-                writer.writerows(itertools.izip_longest(*g_all.values()))
+            for measure in measures:
+                # Save all entropy values into a CSV file, just because.
+                entropy = {'Healthy': {}, 'Schizo': {}}
+                entropy_filepath = os.path.join(group_path,
+                                                'graph_%s_entropy_network_%d.csv' %
+                                                (measure, network))
+                entropy['Healthy'] = healthy_parameters[network][measure]['entropy']
+                entropy['Schizo'] = schizo_parameters[network][measure]['entropy']
+                # itertools allow dictionary entries to have different sizes
+                with open(entropy_filepath, 'wb') as outfile:
+                    writer = csv.writer(outfile)
+                    writer.writerow(entropy.keys())
+                    writer.writerows(itertools.izip_longest(*entropy.values()))
 
         elif data_analysis_type == 'BOLD':
             measure = 'BOLD'
@@ -189,24 +177,19 @@ def group_analysis_pairwise(subjects,
                         results[network][measure][parameter + '_std'] = []
                     results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
 
-
-    res = {}
-    for ii in range(len(parameters)):
-        # qplot = stats.probplot(g1[key], plot=plt)
-        # plt.savefig('plot.png')
-        # pdb.set_trace()
-
-        if group_analysis_type == 'ttest':
-            t12, p12 = stats.ttest_ind(g1[parameters[ii]], g2[parameters[ii]])
-            # Print results
+    for parameter in parameters:
+        for measure in measures:
+            if group_analysis_type == 'ttest':
+                t12, p12 = stats.ttest_ind(healthy_parameters[network][measure][parameter],
+                                           schizo_parameters[network][measure][parameter])
             print('num clusters: %02d' % nclusters)
             print('p and t-value for difference between HC and PD')
             print(p12,t12)
 
             if p12 < significancy:
-                print('Significant difference btw HC and PD when looking at %s' %key)
+                print('Significant difference btw HC and PD when looking at %s' %measure)
             else:
-                print('No significant difference among groups for %s' %key)
+                print('No significant difference among groups for %s' %measure)
 
 
     #------------------------------------------------------------------------------
