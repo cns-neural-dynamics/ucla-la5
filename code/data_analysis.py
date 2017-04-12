@@ -600,13 +600,15 @@ def data_analysis(subjects,
             plt.close()
 
             # Perfom k-means on the BOLD signal.
-            bold_shannon_entropy = {}
+            # Because BOLD only support one network and for compatibility with results.
+            network = 0
+            bold_shannon_entropy = {network: {}}
             kmeans_bold = KMeans(n_clusters=nclusters)
             kmeans_bold.fit_transform(np.transpose(thr_data))
             kmeans_bold_labels = kmeans_bold.labels_
 
             # Calculate Shannon Entropy.
-            bold_shannon_entropy['entropy'] = entropy(kmeans_bold_labels)
+            bold_shannon_entropy[network]['entropy'] = entropy(kmeans_bold_labels)
             save_path = os.path.join(subject_path, 'nclusters_%d' % (nclusters))
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
