@@ -15,10 +15,7 @@ def hutcheson_test(H1, H2, s21, s22, nlabels):
     """ This function is defined in accordance to the hutchenson test to
     calculate the p-values. This function assumes that a two-sided analysis
     is being considered"""
-    # as it does not matter if the t-value is negative or postive, we here
-    # use the abs of the t-statistic. A negative t-statistic tells you that
-    # the observed mean is smaller then the hypothesised value. (This is
-    # only valid for a two sided statistic analysis)
+    # FIXME: calculate s2 based on the formula on Marxico
     t = abs((H1 - H2) / float(sqrt(s21 + s22)))
     df = ((s21 + s22) **2) / (((s21 ** 2) / float(nlabels)) + ((s22 ** 2) /
                                                                float(nlabels)))
@@ -56,7 +53,7 @@ def group_analysis_pairwise(subjects,
     elif data_analysis_type == 'synchrony':
         parameters = ['entropy']
     elif data_analysis_type == 'BOLD':
-        parameters = []
+        parameters = ['entropy']
 
     # Generate the output folders.
     group_path = group_analysis_group_basepath(output_basepath,
@@ -99,7 +96,7 @@ def group_analysis_pairwise(subjects,
                                          'bold_shannon.pickle')
         data = pickle.load(open(data_filepath, 'rb'))
 
-        # Aggregate all data by measure and by healthy/schiophrenic subjects.
+        # Aggregate all data by measure and by healthy/schizophrenic subjects.
         for network in data:
             if int(subject.strip('sub-')) < 40000:
                 if network not in healthy_parameters:
@@ -131,9 +128,9 @@ def group_analysis_pairwise(subjects,
                     if parameter + '_std' not in results[network]:
                         results[network][parameter + '_std'] = []
                     results[network][parameter + '_std'].append(np.std(measures[network][parameter]))
-                # FIXME: Shall this be deleted?
-                # if group_analysis_type == 'hutchenson':
-                #     results['s2'].append(np.mean(g_i['s2']))
+                    # re-implement for hutchenson
+                    # if group_analysis_type == 'hutchenson':
+                    #     results['s2'].append(np.mean(g_i['s2']))
 
             # Save all entropy values into a CSV file, just because.
             entropy_filepath = os.path.join(group_path,
@@ -147,12 +144,6 @@ def group_analysis_pairwise(subjects,
                 writer = csv.writer(outfile)
                 writer.writerow(entropy.keys())
                 writer.writerows(itertools.izip_longest(*entropy.values()))
-
-
-
-
-
-
         # TODO
         elif data_analysis_type == 'graph_analysis':
             # define which parameters are of interest
@@ -198,32 +189,19 @@ def group_analysis_pairwise(subjects,
                 writer.writerows(itertools.izip_longest(*g_all.values()))
 
         elif data_analysis_type == 'BOLD':
-            parameters = ['bold_h']
-            s2_par = ['s2']
-            n_labels ='bold'
-            keys = [parameters[0], s2_par[0], 'bold_h_std']
-            value = []
-            # generate dictionary
-            results = {key: list(value) for key in keys}
+            for measures in [healthy_parameters, schizo_parameters]:
+                for parameter in parameters:
+                    if parameter not in results[network]:
+                        results[network][parameter] = []
+                    results[network][parameter].append(np.mean(measures[network][parameter]))
+                    if parameter + '_std' not in results[network]:
+                        results[network][parameter + '_std'] = []
+                    results[network][parameter + '_std'].append(np.std(measures[network][parameter]))
+                    # re-implement for hutchenson
+                    # if group_analysis_type == 'hutchenson':
+                    #     results['s2'].append(np.mean(g_i['s2']))
 
-            for index in range(ngroups):
-                g_i = groups[index]
-                # select all elements in s2_par
-                for key in parameters:
-                    results[key].append(np.mean(g_i[key]))
-                    results[key + '_std'].append(np.std(g_i[key]))
-                if group_analysis_type == 'hutchenson':
-                    results['s2'].append(np.mean(g_i['s2']))
 
-            # save all entropy values into a csv file
-            g_all = {'g1': g1[parameters[0]], 'g2': g2[parameters[0]]}
-            # itertools allow dictionary entries to have different sizes
-            with open('bold_entropy.csv', 'wb') as outfile:
-                writer = csv.writer(outfile)
-                writer.writerow(g_all.keys())
-                writer.writerows(itertools.izip_longest(*g_all.values()))
-
-             # find significant difference between categories
     res = {}
     for ii in range(len(parameters)):
         # qplot = stats.probplot(g1[key], plot=plt)
