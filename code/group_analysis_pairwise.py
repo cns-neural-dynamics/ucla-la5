@@ -32,7 +32,20 @@ def group_analysis_pairwise(subjects,
                             group_analysis_type,
                             nclusters,
                             rand_ind,
-                            significancy=.05): # FIXME: Define this in code, not as input.
+                            significancy=.05):
+
+    print('--------------------------------------------------------------------')
+    print(' Group analysis')
+    print('--------------------------------------------------------------------')
+    print('')
+    print('* PARAMETERS')
+    print('network type:        %s' %(network_type))
+    print('windowk type:        %s' %(window_type))
+    print('data analysis type:  %s' %(data_analysis_type))
+    print('group analysis type: %s' %(group_analysis_type))
+    print('nclusters:           %d' %(nclusters))
+    print('rand_ind:            %d' %(rand_ind))
+    print('')
 
     # Parameters of interest for the different data analysis types.
     if data_analysis_type == 'graph_analysis':
@@ -116,20 +129,31 @@ def group_analysis_pairwise(subjects,
     ########################################################################
     # Results generation
     ########################################################################
+    print('* RESULTS')
     results = {}
     for network in data:
+        print('Network: %d' % (network))
         results[network] = {}
-
         for measure in measures:
+            print('  Measure: %s' % (measure))
             results[network][measure] = {}
-            for group in [healthy_parameters, schizo_parameters]:
-                for parameter in parameters:
-                    if parameter not in results[network][measure]:
-                        results[network][measure][parameter] = []
+            for parameter in parameters:
+                print('    Parameter: %s' % (parameter))
+                results[network][measure][parameter] = []
+                results[network][measure][parameter + '_std'] = []
+                for group in [healthy_parameters, schizo_parameters]:
+                    print('      Subjects: %s' % ('healthy' if group == healthy_parameters else 'schizo'))
                     results[network][measure][parameter].append(np.mean(group[network][measure][parameter]))
-                    if parameter + '_std' not in results[network][measure]:
-                        results[network][measure][parameter + '_std'] = []
                     results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
+                    print('        Mean: %f' % (results[network][measure][parameter][-1]))
+                    print('        STD:  %f' % (results[network][measure][parameter + '_std'][-1]))
+
+                if group_analysis_type == 'ttest':
+                    t12, p12 = stats.ttest_ind(healthy_parameters[network][measure][parameter],
+                                               schizo_parameters[network][measure][parameter])
+                    print('      t-value: %f' % (t12))
+                    print('      p-value: %f (difference between HC and SC: %s)' %
+                          (p12, 'significant' if p12 < significancy else 'not significant'))
 
             # Save all entropy values into a CSV file, just because.
             entropy_filename = data_analysis_type + '_' + measure + '_entropy_network_%d.csv' % (network)
@@ -142,60 +166,19 @@ def group_analysis_pairwise(subjects,
                 writer = csv.writer(outfile)
                 writer.writerow(entropy.keys())
                 writer.writerows(itertools.izip_longest(*entropy.values()))
+    print('')
 
-        # FIXME: Print to file.
-        for parameter in parameters:
-            for measure in measures:
-                if group_analysis_type == 'ttest':
-                    t12, p12 = stats.ttest_ind(healthy_parameters[network][measure][parameter],
-                                               schizo_parameters[network][measure][parameter])
-                print('network: %02d' % network)
-                print('measure: %s' % measure)
-                print('num clusters: %02d' % nclusters)
-                print('p and t-value for difference between HC and PD')
-                print(p12,t12)
-
-                if p12 < significancy:
-                    print('Significant difference btw HC and PD when looking at %s' % measure)
-                else:
-                    print('No significant difference among groups for %s' % measure)
-
+    print('--------------------------------------------------------------------')
+    print('')
+    print('')
     return
+
     #------------------------------------------------------------------------------
     # Plot Graph Theory Parameteres
     #------------------------------------------------------------------------------
-    print('-----------------------------------------------------------------------')
+
     ind = np.arange(ngroups)
     width = 0.7
-    if data_analysis_type == 'graph_analysis':
-        parameters = [results['degree_centrality_h'],
-                      results['small_wordness_h'],
-                      results['path_distance_h'],
-                      results['weight_h']]
-        parameters_s = ['Degree Centrality', 'Small Worldness', 'Path Distance', 'Weight']
-        parameters_std = [results['degree_centrality_h_std'],
-                          results['small_wordness_h_std'],
-                          results['path_distance_h_std'],
-                          results['weight_h_std']]
-        print (results['degree_centrality_h'],
-               results['small_wordness_h'],
-               results['path_distance_h'],
-               results['weight_h'])
-
-    elif data_analysis_type == 'synchrony':
-        parameters = results['synchrony_h']
-        parameters_s = ['Synchrony']
-        parameters_std = results['synchrony_h_std']
-        print ('mean synchrony: %s') % str(results['synchrony_h']).strip('[]')
-        print ('synchrony std : %s') % str(results['synchrony_h_std']).strip('[]')
-
-    elif data_analysis_type == 'BOLD':
-        parameters = results['bold_h']
-        parameters_s = ['BOLD correlation']
-        parameters_std = results['bold_h_std']
-        print ('mean bold: %s') % str(results['bold_h']).strip('[]')
-        print ('bold std : %s') % str(results['bold_h_std']).strip('[]')
-
     if data_analysis_type == 'synchrony' or data_analysis_type == 'BOLD':
         print('plotting and saving %s' %parameters_s)
         fig, ax = plt.subplots()

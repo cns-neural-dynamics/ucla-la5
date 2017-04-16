@@ -207,7 +207,6 @@ if __name__ == '__main__':
                          '--nclusters, ' + \
                          '--rand-ind.')
 
-        print('Group analysis. Type: %s.' % (args.group_analysis_type))
         group_analysis_pairwise(subjects,
                                 group_analysis_input_basepath,
                                 group_analysis_output_basepath,
