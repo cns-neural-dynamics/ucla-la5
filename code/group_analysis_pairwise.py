@@ -61,6 +61,9 @@ def group_analysis_pairwise(subjects,
     if not os.path.isdir(group_path):
         os.makedirs(group_path)
 
+    ########################################################################
+    # Input aggregation
+    ########################################################################
     # Aggregate input  group for all subjects in just 2 groups.
     healthy_parameters = {}
     schizo_parameters = {}
@@ -110,12 +113,14 @@ def group_analysis_pairwise(subjects,
             else:
                  raise ValueError('Unexpected subject ID: %s.' % (subject))
 
-    # Generate the results dictionary.
+    ########################################################################
+    # Results generation
+    ########################################################################
     results = {}
     for network in data:
         results[network] = {}
-        if data_analysis_type == 'synchrony':
-            measure = 'synchrony'
+
+        for measure in measures:
             results[network][measure] = {}
             for group in [healthy_parameters, schizo_parameters]:
                 for parameter in parameters:
@@ -127,9 +132,8 @@ def group_analysis_pairwise(subjects,
                     results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
 
             # Save all entropy values into a CSV file, just because.
-            entropy_filepath = os.path.join(group_path,
-                                            'synchrony_entropy_network_%d.csv' %
-                                            (network))
+            entropy_filename = data_analysis_type + '_' + measure + '_entropy_network_%d.csv' % (network)
+            entropy_filepath = os.path.join(group_path, entropy_filename)
             entropy = {
                 'Healthy': healthy_parameters[network][measure]['entropy'],
                 'Schizo': schizo_parameters[network][measure]['entropy']
@@ -138,60 +142,25 @@ def group_analysis_pairwise(subjects,
                 writer = csv.writer(outfile)
                 writer.writerow(entropy.keys())
                 writer.writerows(itertools.izip_longest(*entropy.values()))
-        elif data_analysis_type == 'graph_analysis':
-            results[network] = {}
+
+        # FIXME: Print to file.
+        for parameter in parameters:
             for measure in measures:
-                results[network][measure] = {}
-                for group in [healthy_parameters, schizo_parameters]:
-                    for parameter in parameters:
-                        if parameter not in results[network][measure]:
-                            results[network][measure][parameter] = []
-                        results[network][measure][parameter].append(np.mean(group[network][measure][parameter]))
-                        if parameter + '_std' not in results[network][measure]:
-                            results[network][measure][parameter + '_std'] = []
-                        results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
+                if group_analysis_type == 'ttest':
+                    t12, p12 = stats.ttest_ind(healthy_parameters[network][measure][parameter],
+                                               schizo_parameters[network][measure][parameter])
+                print('network: %02d' % network)
+                print('measure: %s' % measure)
+                print('num clusters: %02d' % nclusters)
+                print('p and t-value for difference between HC and PD')
+                print(p12,t12)
 
-            for measure in measures:
-                # Save all entropy values into a CSV file, just because.
-                entropy = {'Healthy': {}, 'Schizo': {}}
-                entropy_filepath = os.path.join(group_path,
-                                                'graph_%s_entropy_network_%d.csv' %
-                                                (measure, network))
-                entropy['Healthy'] = healthy_parameters[network][measure]['entropy']
-                entropy['Schizo'] = schizo_parameters[network][measure]['entropy']
-                # itertools allow dictionary entries to have different sizes
-                with open(entropy_filepath, 'wb') as outfile:
-                    writer = csv.writer(outfile)
-                    writer.writerow(entropy.keys())
-                    writer.writerows(itertools.izip_longest(*entropy.values()))
+                if p12 < significancy:
+                    print('Significant difference btw HC and PD when looking at %s' % measure)
+                else:
+                    print('No significant difference among groups for %s' % measure)
 
-        elif data_analysis_type == 'BOLD':
-            measure = 'BOLD'
-            results[network][measure] = {}
-            for group in [healthy_parameters, schizo_parameters]:
-                for parameter in parameters:
-                    if parameter not in results[network][measure]:
-                        results[network][measure][parameter] = []
-                    results[network][measure][parameter].append(np.mean(group[network][measure][parameter]))
-                    if parameter + '_std' not in results[network][measure]:
-                        results[network][measure][parameter + '_std'] = []
-                    results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
-
-    for parameter in parameters:
-        for measure in measures:
-            if group_analysis_type == 'ttest':
-                t12, p12 = stats.ttest_ind(healthy_parameters[network][measure][parameter],
-                                           schizo_parameters[network][measure][parameter])
-            print('num clusters: %02d' % nclusters)
-            print('p and t-value for difference between HC and PD')
-            print(p12,t12)
-
-            if p12 < significancy:
-                print('Significant difference btw HC and PD when looking at %s' %measure)
-            else:
-                print('No significant difference among groups for %s' %measure)
-
-
+    return
     #------------------------------------------------------------------------------
     # Plot Graph Theory Parameteres
     #------------------------------------------------------------------------------
