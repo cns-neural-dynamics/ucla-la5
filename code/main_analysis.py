@@ -123,11 +123,6 @@ if __name__ == '__main__':
         choices=group_analysis_types,
         help='Group analysis type. Choose from: ' + ', '.join(group_analysis_types)
     )
-    parser.add_argument(
-        '--ngroups',
-        type=int, dest='ngroups', metavar='NGROUPS',
-        help='Number of groups to use in group data analysis.'
-    )
     args = parser.parse_args()
 
     # Load subjects.
@@ -197,26 +192,27 @@ if __name__ == '__main__':
     # Group analysis
     ############################################################################
     if args.analyse_data_group:
-        if args.group_analysis_type is None or \
-           args.network_type is None or \
+        if args.network_type is None or \
+           args.window_type is None or \
+           args.data_analysis_type is None or \
+           args.group_analysis_type is None or \
            args.nclusters is None or \
-           args.rand_ind is None or \
-           args.ngroups is None:
+           args.rand_ind is None:
             parser.error('You must specify: ' + \
-                         '--group-analysis-type, ' + \
                          '--network-type, ' + \
+                         '--window-type, ' + \
+                         '--data-analysis-type, ' + \
+                         '--group-analysis-type, ' + \
                          '--nclusters, ' + \
-                         '--rand-ind' + \
-                         '--ngroups.')
+                         '--rand-ind.')
 
         print('Group analysis. Type: %s.' % (args.group_analysis_type))
-        group_analysis_pairwise(
-            subjects,
-            args.nclusters,
-            args.ngroups,
-            group_analysis_output_basepath,
-            args.rand_ind,
-            args.data_analysis_type,
-            args.group_analysis_type,
-            network_comp=args.network_type
-        )
+        group_analysis_pairwise(subjects,
+                                group_analysis_input_basepath,
+                                group_analysis_output_basepath,
+                                args.network_type,
+                                args.window_type,
+                                args.data_analysis_type,
+                                args.group_analysis_type,
+                                args.nclusters,
+                                args.rand_ind)
