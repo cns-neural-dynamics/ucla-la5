@@ -23,7 +23,7 @@ subjects_filename = 'subjects.json'
 # Pre-processing
 # TODO: Add input paths.
 # This folder contains all subjects' folders for the pre-processing phase.
-preprocessing_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'preprocessing_out')
+preprocessing_output_basepath = os.path.join(base_path, 'data_out', 'preprocessing_out')
 
 # ROI extraction
 # Input image for ROI extraction
@@ -36,11 +36,12 @@ roi_input_network_filename = os.path.join(base_path, 'data_in', 'voi_extraction'
 roi_output_basepath = os.path.join(base_path, 'data_out', 'extract_roi')
 
 # Data analysis
-data_analysis_input_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'extract_roi')
-data_analysis_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'data_analysis')
+data_analysis_input_basepath = roi_output_basepath
+data_analysis_output_basepath = os.path.join(base_path, 'data_out', 'data_analysis')
 
 # Group data analysis
-group_analysis_output_basepath = os.path.join(base_path, 'data_out', 'ucla_la5', 'data_analysis', 'pairwise_comparison')
+group_analysis_input_basepath = data_analysis_output_basepath
+group_analysis_output_basepath = os.path.join(base_path, 'data_out', 'group_analysis')
 
 ################################################################################
 # Parameters
