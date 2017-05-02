@@ -1,4 +1,3 @@
-#!/share/apps/anaconda/bin/python
 import os
 from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth, BET
 from nipype.interfaces.freesurfer import BBRegister, MRIConvert
@@ -8,56 +7,65 @@ from nipype.interfaces.utility import Merge
 from nipype.pipeline.engine import Workflow, Node, MapNode
 from nipype.interfaces.io import DataSink, FreeSurferSource, DataGrabber
 from nipype.interfaces.utility import IdentityInterface, Function
+
+
 from nipypext import nipype_wrapper
 
-def preprocessing_pipeline(subjects_list):
-    def get_file(in_file):
-        """
-        ApplyTransforms ouptu is a list. This function gets the path to warped file
-        from the import generated list
-        """
-        path2file = in_file[0]
-        return path2file
 
-    def get_VOIs(preprocessed_image, segmented_image_path, segmented_regions_path,
-            subject_id):
-        '''Extract VOIs from preprocesssed image using the provided atlas and the
-        corresponding Lookup table (where the different regions are labled)'''
+# FIXME: mriconvert and ants_reg not working on new cluster
+def get_file(in_file):
+    """
+    ApplyTransforms ouptu is a list. This function gets the path to warped file
+    from the import generated list
+    """
+    path2file = in_file[0]
+    return path2file
 
-        import os
-        import numpy as np
-        import nibabel as nib
 
-        # Load segmented image and obtain data from the image
-        segmented_image =  nib.load(segmented_image_path)
-        segmented_image_data = segmented_image.get_data()
-        # Load the Lookup Table which assigns each region to one specific pixel
-        # intensity
-        segmented_regions = np.genfromtxt(segmented_regions_path, dtype = [('numbers',
-        '<i8'), ('regions', 'S31'), ('labels', 'i4')], delimiter=',')
+def get_VOIs(preprocessed_image, segmented_image_path, segmented_regions_path,
+             subject_id):
+    '''Extract VOIs from preprocesssed image using the provided atlas and the
+    corresponding Lookup table (where the different regions are labled)'''
 
-        # Load subjects preprocessed image and extract data from the image
-        image = nib.load(preprocessed_image)
-        image_data = image.get_data()
-        # Obtain different time points (corrisponding to the image TR)
-        time = image_data.shape[3]
-        # Initialise matrix where the averaged BOLD signal for each region will be
-        # saved
-        avg = np.zeros((segmented_regions['labels'].shape[0], time))
-        # Find the voxels on the subject's image that correspond to the voxels on
-        # the labeled image for each time point and calculate the mean BOLD response
-        for region in range(len(segmented_regions)):
-            label = segmented_regions['labels'][region]
-            for t in range(time):
-                data = image_data[:, :, :, t]
-                boolean_mask = np.where(segmented_image_data == label)
-                data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
-                # for all regions calculate the mean BOLD at each time point
-                avg[region, t] = data.mean()
-        # save data into a text file
-        file_name = '%s.txt' % subject_id
-        np.savetxt(file_name, avg, delimiter=' ', fmt='%5e')
-        return os.path.abspath(file_name)
+    import os
+    import numpy as np
+    import nibabel as nib
+
+    # Load segmented image and obtain data from the image
+    segmented_image =  nib.load(segmented_image_path)
+    segmented_image_data = segmented_image.get_data()
+    # Load the Lookup Table which assigns each region to one specific pixel
+    # intensity
+    segmented_regions = np.genfromtxt(segmented_regions_path, dtype = [('numbers',
+                                                                        '<i8'), ('regions', 'S31'), ('labels', 'i4')], delimiter=',')
+
+    # Load subjects preprocessed image and extract data from the image
+    image = nib.load(preprocessed_image)
+    image_data = image.get_data()
+    # Obtain different time points (corrisponding to the image TR)
+    time = image_data.shape[3]
+    # Initialise matrix where the averaged BOLD signal for each region will be
+    # saved
+    avg = np.zeros((segmented_regions['labels'].shape[0], time))
+    # Find the voxels on the subject's image that correspond to the voxels on
+    # the labeled image for each time point and calculate the mean BOLD response
+    for region in range(len(segmented_regions)):
+        label = segmented_regions['labels'][region]
+        for t in range(time):
+            data = image_data[:, :, :, t]
+            boolean_mask = np.where(segmented_image_data == label)
+            data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
+            # for all regions calculate the mean BOLD at each time point
+            avg[region, t] = data.mean()
+    # save data into a text file
+    file_name = '%s.txt' % subject_id
+    np.savetxt(file_name, avg, delimiter=' ', fmt='%5e')
+    return os.path.abspath(file_name)
+
+
+def preprocess_data(subjects,
+                    preprocessing_input_basepath,
+                    preprocessing_output_basepath):
 
     #------------------------------------------------------------------------------
     #                              Specify Variabless
@@ -67,36 +75,21 @@ def preprocessing_pipeline(subjects_list):
     # location of template file
     template = Info.standard_image('MNI152_T1_2mm.nii.gz')
 
-    # subjects_list=['sub-10159', 'sub-10171']
-    # subjects_list = ['sub-10159', 'sub-10171', 'sub-10189', 'sub-10193', 'sub-10206',
-    #         'sub-10217', 'sub-10225', 'sub-10227', 'sub-10228', 'sub-10235',
-    #         'sub-10249', 'sub-10269', 'sub-10271', 'sub-10273', 'sub-10274',
-    #         'sub-10280', 'sub-10290', 'sub-10292', 'sub-10299', 'sub-10304',
-    #         'sub-10316', 'sub-10321', 'sub-10325', 'sub-10329', 'sub-10339',
-    #         'sub-10340', 'sub-10345', 'sub-10347', 'sub-10356', 'sub-10361',
-    #         'sub-10365', 'sub-10376', 'sub-10377', 'sub-10388']
-
-    # Data Location
-    base_path = os.path.join(os.sep, 'home', 'jdafflon', 'scratch', 'personal')
-    data_in_dir  = os.path.join(base_path, 'data_in', 'ucla_la5', 'ds000030', 'reconall_data')
-    data_out_dir = os.path.join(base_path, 'data_out', 'ucla_la5')
-
-
     # Get functional image
     datasource = Node(interface=DataGrabber(infields=['subject_id'],
             outfields=['epi', 't1']), name='datasource')
-    datasource.inputs.base_directory = data_in_dir
+    datasource.inputs.base_directory = preprocessing_input_basepath
     datasource.inputs.template = '*'
     datasource.inputs.sort_filelist = True
     datasource.inputs.field_template = dict(epi=os.path.join('%s', 'func', '%s_task-stopsignal_bold.nii.gz'),
                                             t1=os.path.join('%s', 'anat', '%s_T1w.nii.gz' ))
     datasource.inputs.template_args = dict(epi=[['subject_id', 'subject_id']],
                                            t1=[['subject_id', 'subject_id']])
-    datasource.inputs.subject_id = subjects_list
+    datasource.inputs.subject_id = subjects
     #------------------------------------------------------------------------------
     # Use data grabber specific for FreeSurfer data
     fslsource = Node(FreeSurferSource(), name='getFslData')
-    fslsource.inputs.subjects_dir = data_in_dir
+    fslsource.inputs.subjects_dir = preprocessing_input_basepath
 
     # Generate mean image - only for the EPI image
     mean_image = Node(MeanImage(), name = 'Mean_Image')
@@ -106,7 +99,7 @@ def preprocessing_pipeline(subjects_list):
     mot_par = Node(MCFLIRT(), name='motion_correction')
     mot_par.inputs.mean_vol = True
     mot_par.inputs.save_rms = True
-    mot_par.inputs.save_plots =True
+    mot_par.inputs.save_plots = True
 
     # convert FreeSurfer's MGZ format to nii.gz format
     mgz2nii = Node(MRIConvert(), name='mri_convert')
@@ -126,24 +119,24 @@ def preprocessing_pipeline(subjects_list):
     antsreg.inputs.num_threads = 8
     antsreg.inputs.output_warped_image = True
     antsreg.inputs.output_inverse_warped_image = True
-    antsreg.inputs.sigma_units=['vox']*3
+    antsreg.inputs.sigma_units = ['vox']*3
     antsreg.inputs.transforms = ['Rigid', 'Affine', 'SyN']
     antsreg.inputs.terminal_output = 'file'
-    antsreg.inputs.winsorize_lower_quantile=0.005
-    antsreg.inputs.winsorize_upper_quantile=0.995
+    antsreg.inputs.winsorize_lower_quantile = 0.005
+    antsreg.inputs.winsorize_upper_quantile = 0.995
     antsreg.inputs.convergence_threshold = [1e-06]
-    antsreg.inputs.metric=['MI', 'MI', 'CC']
+    antsreg.inputs.metric = ['MI', 'MI', 'CC']
     antsreg.inputs.metric_weight = [1.0]*3
     antsreg.inputs.number_of_iterations = [[1000, 500, 250, 100],
                                            [1000, 500, 250, 100],
                                            [100,   70,  50,  20]]
     antsreg.inputs.radius_or_number_of_bins = [32,32,4]
-    antsreg.inputs.sampling_percentage=[0.25, 0.25, 1]
+    antsreg.inputs.sampling_percentage = [0.25, 0.25, 1]
     antsreg.inputs.sampling_strategy = ['Regular', 'Regular', 'None']
     antsreg.inputs.shrink_factors = [[8,4,2,1]]*3
     antsreg.inputs.smoothing_sigmas = [[3, 2, 1, 0]]*3
-    antsreg.inputs.transform_parameters=[(0.1,), (0.1,), (0.1, 3.0, 0.0)]
-    antsreg.inputs.use_histogram_matching= True
+    antsreg.inputs.transform_parameters = [(0.1,), (0.1,), (0.1, 3.0, 0.0)]
+    antsreg.inputs.use_histogram_matching = True
     antsreg.inputs.write_composite_transform = True
     antsreg.inputs.save_state = 'savestate.mat'
 
@@ -152,7 +145,7 @@ def preprocessing_pipeline(subjects_list):
     bbreg.inputs.init = 'fsl'
     bbreg.inputs.contrast_type = 't2'
     bbreg.inputs.out_fsl_file = True
-    bbreg.inputs.subjects_dir = data_in_dir
+    bbreg.inputs.subjects_dir = preprocessing_input_basepath
 
     # convert BBRegister transformation to ANTS ITK format. Necessary to convert
     # fsl.style affine registration into ANTS itk format
@@ -196,7 +189,7 @@ def preprocessing_pipeline(subjects_list):
                      'mc', 'subject_id', 'mask'],
                                         output_names=['output_file'],
                                         function=nipype_wrapper.get_ica_aroma))
-    outDir = os.path.join(data_out_dir,'preprocessing_out', 'ica_aroma')
+    outDir = os.path.join(preprocessing_output_basepath,'preprocessing_out', 'ica_aroma')
     ica_aroma.inputs.outDir = outDir
 
     # spatial filtering
@@ -213,20 +206,20 @@ def preprocessing_pipeline(subjects_list):
     temp_filt = Node(TemporalFilter(), name='TemporalFilter')
     temp_filt.inputs.highpass_sigma = 25
 
-    # Extract VOIs
-    #----------------
-    extract_vois = Node(name='extract_VOIs',
-                             interface = Function(input_names  =
-                                                                ['preprocessed_image',
-                                                                  'segmented_image_path',
-                                                                  'segmented_regions_path',
-                                                                  'subject_id'],
-                                                  output_names = ['output_file'],
-                                                  function     = get_VOIs))
-    extract_vois.inputs.segmented_image_path = os.path.join(base_path, 'data_in',
-            'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
-    extract_vois.inputs.segmented_regions_path = os.path.join(base_path, 'data_in', 'voi_extraction',
-            'LookupTable')
+    # # Extract VOIs
+    # #----------------
+    # extract_vois = Node(name='extract_VOIs',
+    #                          interface = Function(input_names  =
+    #                                                             ['preprocessed_image',
+    #                                                               'segmented_image_path',
+    #                                                               'segmented_regions_path',
+    #                                                               'subject_id'],
+    #                                               output_names = ['output_file'],
+    #                                               function     = get_VOIs))
+    # extract_vois.inputs.segmented_image_path = os.path.join(base_path, 'data_in',
+    #         'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
+    # extract_vois.inputs.segmented_regions_path = os.path.join(base_path, 'data_in', 'voi_extraction',
+    #         'LookupTable')
     #------------------------------------------------------------------------------
     #                             Set up Workflow
     #------------------------------------------------------------------------------
@@ -236,11 +229,11 @@ def preprocessing_pipeline(subjects_list):
     # Define Infosource, which is the input Node. Information from subject_id are
     # obtained from this Node
     infosource = Node(interface=IdentityInterface(fields = ['subject_id']), name = 'InfoSource')
-    infosource.iterables = ('subject_id', subjects_list)
+    infosource.iterables = ('subject_id', subjects)
 
     # Define DataSink, where all data will be saved
     data_sink = Node(DataSink(), name = 'DataSink')
-    data_sink.inputs.base_directory = os.path.join(data_out_dir, 'preprocessing_out')
+    data_sink.inputs.base_directory = os.path.join(preprocessing_output_basepath, 'preprocessing_out')
     # data_sink.inputs.container = '{subject_id}'
     substitutions = [('_subject_id_', ''),
                      ('_fwhm', 'fwhm'),
@@ -249,7 +242,7 @@ def preprocessing_pipeline(subjects_list):
 
     # Define workflow name and where output will be saved
     preproc = Workflow(name = 'preprocessing')
-    preproc.base_dir = data_out_dir
+    preproc.base_dir = preprocessing_output_basepath
 
     # Define connection between nodes
     preproc.connect([
@@ -315,15 +308,15 @@ def preprocessing_pipeline(subjects_list):
            # Apply temporal filtering
            (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
            (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
-           (temp_filt,           extract_vois,   [('out_file'       ,
-                                                                  'preprocessed_image')] ),
-           (infosource,          extract_vois,   [('subject_id'     , 'subject_id'    )] ),
-           (extract_vois,        data_sink,      [('output_file'    ,   'extract_vois')] ),
+           # (temp_filt,           extract_vois,   [('out_file'       ,
+           #                                                        'preprocessed_image')] ),
+           # (infosource,          extract_vois,   [('subject_id'     , 'subject_id'    )] ),
+           # (extract_vois,        data_sink,      [('output_file'    ,   'extract_vois')] ),
            ])
 
     # save graph of the workflow into the workflow_graph folder
-    preproc.write_graph(os.path.join(data_out_dir, 'preprocessing_out', 'workflow_graph',
+    preproc.write_graph(os.path.join(preprocessing_output_basepath, 'preprocessing_out', 'workflow_graph',
         'workflow_graph.dot'))
-    # preproc.run()
-    preproc.run(plugin = 'SGEGraph', plugin_args = '-q short.q')
+    preproc.run()
+    # preproc.run(plugin = 'SGEGraph', plugin_args = '-q short.q')
     # preproc.run('MultiProc', plugin_args={'n_procs': 8})
