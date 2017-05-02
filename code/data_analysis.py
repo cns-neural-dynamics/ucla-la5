@@ -213,7 +213,7 @@ def extract_roi(subjects,
             os.makedirs(subject_path)
 
         # Load the subject input image.
-        image_filename = os.path.join(input_basepath, 'final_image', subject,
+        image_filename = os.path.join(input_basepath, 'preprocessing_out', 'final_image', subject,
                                       preprocessed_image_filename)
         image = nib.load(image_filename)
         image_data = image.get_data()

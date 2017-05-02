@@ -3,14 +3,17 @@ import subprocess
 import pickle
 
 
-base_path = "/scratch/jdafflon/personal/data_in/ucla_la5/ds000030"
-# sub_list = ['sub-10171', 'sub-10189', 'sub-10193', 'sub-10206',
-#         'sub-10217', 'sub-10225', 'sub-10227', 'sub-10228', 'sub-10235',
-#         'sub-10249', 'sub-10269', 'sub-10271', 'sub-10273', 'sub-10274',
-#         'sub-10280', 'sub-10290', 'sub-10292', 'sub-10299', 'sub-10304',
-#         'sub-10316', 'sub-10321', 'sub-10325', 'sub-10329', 'sub-10339',
-#         'sub-10340', 'sub-10345', 'sub-10347', 'sub-10356', 'sub-10361',
-#         'sub-10365', 'sub-10376', 'sub-10377', 'sub-10388']
+base_path = "/home/jdafflon/data/ucla-la5/data_in/ds000030"
+sub_list = [
+        'sub-10159', 'sub-10171', 'sub-10189', 'sub-10193', 'sub-10206',
+        'sub-10217', 'sub-10225', 'sub-10227', 'sub-10228', 'sub-10235',
+        'sub-10249', 'sub-10269', 'sub-10271', 'sub-10273', 'sub-10274',
+        'sub-10280', 'sub-10290', 'sub-10292', 'sub-10299']
+
+        # ['sub-10304',
+        # 'sub-10316', 'sub-10321', 'sub-10325', 'sub-10329', 'sub-10339',
+        # 'sub-10340', 'sub-10345', 'sub-10347', 'sub-10356', 'sub-10361',
+        # 'sub-10365', 'sub-10376', 'sub-10377', 'sub-10388']
 # sub_list = ['sub-10429', 'sub-10438', 'sub-10440', 'sub-10448',
 #         'sub-10455', 'sub-10460', 'sub-10471', 'sub-10478', 'sub-10487',
 #         'sub-10492', 'sub-10501', 'sub-10506', 'sub-10517', 'sub-10523',
@@ -54,7 +57,8 @@ else:
 
 for sub in sub_list:
     file_path = os.path.join(base_path, sub, 'anat', ''.join([sub, '_T1w.nii.gz']))
-    cmd = 'fsl_sub recon-all -all -i {0} -subjid {1} -sd {2}/reconall_data'.format(file_path, sub,base_path)
+    # FIXME: This command is not running when calling directly from terminal
+    cmd = 'srun /apps/software/freesurfer/5.3.0/bin/recon-all -all -i {0} -subjid {1} -sd {2}/reconall_data'.format(file_path, sub,base_path)
     job_id = subprocess.check_output(cmd, shell=True)
     sub2id[sub] = job_id
 

@@ -8,6 +8,7 @@ from argparse import ArgumentParser
 from data_analysis import extract_roi, data_analysis
 from group_analysis_pairwise import group_analysis_pairwise
 from subjects import load_subjects
+from preprocessing_workflow import preprocess_data
 
 ################################################################################
 # File paths
@@ -15,15 +16,15 @@ from subjects import load_subjects
 
 # Base path for all input and output data.
 base_path = os.path.join(os.path.sep, 'home', 'jdafflon', 'data', 'ucla-la5')
-
+data_path = os.path.join(os.path.sep, 'group', 'scz_dynamics')
 # Subjects
 # FIXME: Move to data_in folder.
 subjects_filename = 'subjects.json'
 
 # Pre-processing
-# TODO: Add input paths.
 # This folder contains all subjects' folders for the pre-processing phase.
-preprocessing_output_basepath = os.path.join(base_path, 'data_out', 'preprocessing_out')
+preprocessing_input_basepath = os.path.join(data_path, 'data_in', 'reconall_data')
+preprocessing_output_basepath = os.path.join(data_path, 'data_out')
 
 # ROI extraction
 # Input image for ROI extraction
@@ -136,10 +137,12 @@ if __name__ == '__main__':
     # Pre-processing
     ############################################################################
     if args.preprocess:
-        # TODO: Implement pre-processing.
-        # TODO: Pre-procesing wants subjects to be a list of list.
+        # Note: Preprocessing is only running on the old cluster
+        print('Preprocessing')
+        preprocess_data(subjects,
+                        preprocessing_input_basepath,
+                        preprocessing_output_basepath)
         print('Pre-processing.')
-        pass
 
     ############################################################################
     # ROI extraction
