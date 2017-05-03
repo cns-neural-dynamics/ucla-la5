@@ -28,21 +28,21 @@ preprocessing_output_basepath = os.path.join(data_path, 'data_out')
 
 # ROI extraction
 # Input image for ROI extraction
-roi_input_segmented_image_filename = os.path.join(base_path, 'data_in', 'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
+roi_input_segmented_image_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
 # Input region list for ROI extraction
-roi_input_segmented_regions_filename = os.path.join(base_path, 'data_in', 'voi_extraction', 'LookupTable')
+roi_input_segmented_regions_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'LookupTable')
 # Image where between_network and within_network are specified.
-roi_input_network_filename = os.path.join(base_path, 'data_in', 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
+roi_input_network_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
 # For each subject, this folder will contain a folder with the extracted ROI.
-roi_output_basepath = os.path.join(base_path, 'data_out', 'extract_roi')
+roi_output_basepath = os.path.join(data_path, 'data_out', 'extract_roi')
 
 # Data analysis
 data_analysis_input_basepath = roi_output_basepath
-data_analysis_output_basepath = os.path.join(base_path, 'data_out', 'data_analysis')
+data_analysis_output_basepath = os.path.join(data_path, 'data_out', 'data_analysis')
 
 # Group data analysis
 group_analysis_input_basepath = data_analysis_output_basepath
-group_analysis_output_basepath = os.path.join(base_path, 'data_out', 'group_analysis')
+group_analysis_output_basepath = os.path.join(data_path, 'data_out', 'group_analysis')
 
 ################################################################################
 # Parameters
@@ -190,7 +190,11 @@ if __name__ == '__main__':
                       args.window_type,
                       args.data_analysis_type,
                       args.nclusters,
-                      args.rand_ind)
+                      args.rand_ind,
+                      roi_input_segmented_image_filename,
+                      roi_input_segmented_regions_filename,
+                      preprocessing_output_basepath)
+
 
     ############################################################################
     # Group analysis
