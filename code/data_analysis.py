@@ -730,8 +730,8 @@ def data_analysis(subjects,
 
                     # calculate flexibility for each node
                     flexibility_regions = np.sum(flexibility_time, axis=0)
-                    # mean_flexibility = flexibility_regions / nregions
-                    graph_theory_measures[network]['flexibility'] = flexibility_regions
+                    mean_flexibility = np.mean(flexibility_regions)
+                    graph_theory_measures[network]['flexibility'] = mean_flexibility
 
                     # Note: Because K-means will be performed over time and of the way
                     #  the data is defined all measures will need to transposed.
