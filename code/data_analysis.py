@@ -153,10 +153,12 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_typ
 
     # Find optimal mean of healthy subjects.
     k_optima = {}
-    print ('Optimal mean threshold:')
+    print('')
+    print ('* OPTIMAL MEAN THRESHOLD:')
     for network in range(nnetwork_keys):
         k_optima[network] = np.mean(healthy_k_optima[network])
         print('Network %d: %3f' % (network, k_optima[network]))
+    print('')
     return healthy_k_optima
 
 def extract_roi(subjects,
@@ -209,7 +211,6 @@ def extract_roi(subjects,
     # Extract ROI for each subjects.
     preprocessed_image_filename = 'denoised_func_data_nonaggr_filt.nii.gz'
     for subject in subjects:
-        print 'Analysing subject: %s.' % subject
 
         # Generate the output folder.
         subject_path = os.path.join(output_basepath, subject)
@@ -230,6 +231,15 @@ def extract_roi(subjects,
         image = nib.load(image_filename)
         image_data = image.get_data()
         ntpoints = image_data.shape[3]
+
+        print('--------------------------------------------------------------------')
+        print(' Extract ROI')
+        print('--------------------------------------------------------------------')
+        print('')
+        print('* PARAMETERS')
+        print('Subject ID:        %s' %(subject))
+        print('network type:        %s' %(network_type))
+        print('')
 
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
@@ -339,7 +349,12 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
 
     # Compute synchrony, metastability and mean synchrony for each subject, both
     # globally and pairwise.
+    print('* DYNAMIC MEASURES')
+
     for subject in subjects:
+
+        print('Subject ID:        %s' %(subject))
+
         # Calculate Hilbert transform for the network(s).
         # Import ROI data for each VOI.
         # The actual data depends on the network type.
@@ -392,6 +407,7 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
         pickle.dump(dynamic_measures,
                     open(os.path.join(subject_path, 'dynamic_measures.pickle'),
                          'wb'))
+        print('    Done')
 
 
 def compute_hilbert_tranform(data, TR=2, upper_bound=0.1, lower_bound=0.04):
@@ -579,7 +595,22 @@ def data_analysis(subjects,
                          'full_network networks.')
 
     window_size = 5
+
+    print('--------------------------------------------------------------------')
+    print(' Data Analysis')
+    print('--------------------------------------------------------------------')
+    print('')
+    print('* PARAMETERS')
+    print('Network type:        %s' %(network_type))
+    print('Window type:         %s' %(window_type))
+    print('Window size:         %d' %(window_size))
+    print('Data analysis type:  %s' %(data_analysis_type))
+    print('Nclusters:           %d' %(nclusters))
+    print('Rand_ind:            %d' %(rand_ind))
+    print('')
+
     calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type)
+
     # Calculate the optimal k from the healthy subjects only.
     # Note: This is not needed with the BOLD data analysis. The optimal k will
     #       be used later when computing the Shannon entropy measures.
@@ -592,6 +623,7 @@ def data_analysis(subjects,
 
     # Calculate the Shannon entropy measures for every subject.
     for subject in subjects:
+
         subject_path = data_analysis_subject_basepath(output_basepath,
                                                       network_type,
                                                       window_type,
@@ -631,8 +663,6 @@ def data_analysis(subjects,
             pickle.dump(bold_shannon_entropy,
                         open(os.path.join(save_path, 'bold_shannon.pickle'),
                              'wb'))
-            print('Done!')
-            print ('--------------------------------------------------------------')
         else:
             # This first part of the code is common to the synchrony and graph
             # analysis data analysis types.

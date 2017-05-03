@@ -152,7 +152,6 @@ if __name__ == '__main__':
             parser.error('You must specify: --network_type.')
 
         # Extract ROIs.
-        print('Extract ROI. Type: %s.' % (args.network_type))
         extract_roi(subjects,
                     args.network_type,
                     preprocessing_output_basepath,
@@ -178,11 +177,6 @@ if __name__ == '__main__':
                          '--rand-ind.')
 
         # Analyse data.
-        print(('Data analysis. ' +
-               'Network: %s. Window: %s ' +
-               'Type: %s. Clusters: %d. Rand index: %d') %
-              (args.network_type, args.window_type,
-               args.data_analysis_type, args.nclusters, args.rand_ind))
         data_analysis(subjects,
                       data_analysis_input_basepath,
                       data_analysis_output_basepath,
