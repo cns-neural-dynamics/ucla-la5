@@ -392,7 +392,6 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
         pickle.dump(dynamic_measures,
                     open(os.path.join(subject_path, 'dynamic_measures.pickle'),
                          'wb'))
-    return mean_synchrony
 
 
 def compute_hilbert_tranform(data, TR=2, upper_bound=0.1, lower_bound=0.04):
@@ -786,7 +785,8 @@ def data_analysis(subjects,
                     kmeans = KMeans(n_clusters=nclusters)
                     shannon_entropy_measures[network] = {}
                     # Select only keys that will be used on the analysis
-                    for measure in graph_theory_measures[network]:
+                    kmeans_measures = ['weight', 'cluster_coefficient', 'degree_centrality']
+                    for measure in kmeans_measures:
                         shannon_entropy_measures[network][measure] = {}
                         measures = shannon_entropy_measures[network][measure]
 
