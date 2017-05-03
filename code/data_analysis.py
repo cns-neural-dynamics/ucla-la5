@@ -15,7 +15,8 @@ from nitime.analysis import FilterAnalyzer
 from scipy.signal import hilbert
 from scipy.stats import entropy
 from bct import (degrees_und, distance_bin, transitivity_bu, clustering_coef_bu,
-                 randmio_und_connected, charpath, clustering, breadthdist, efficiency_bin)
+                 randmio_und_connected, charpath, clustering, breadthdist, efficiency_bin,
+                 community_louvain)
 from sklearn.cluster import KMeans
 
 
@@ -709,6 +710,29 @@ def data_analysis(subjects,
                     nregions = synchrony_bins[network].shape[0]
                     ntpoints = synchrony_bins[network].shape[2]
                     graph_theory_measures[network] = {}
+
+                    # Modularity/Flexibility:
+                    # -------------------
+                    # For the fist iteration each node is considered part of a separate community. All following iterations
+                    # use previous knowledge to find only the nodes that change communities.
+                    community_affiliation = np.arange(nregions) + 1
+                    community_0 = 0
+                    flexibility_time = np.zeros((ntpoints, nregions), dtype=bool)
+                    for t in range(ntpoints):
+                        W = synchrony_bins[network][:, :, t]
+                        community_t, q = community_louvain(W, ci=community_affiliation)
+                        # True: are the elemets that are different between time points
+                        flexibility_time[t] = community_t - community_0 != 0
+                        community_0 = community_t
+                        community_affiliation = community_t
+
+                    # Eliminate first time point
+                    flexibility_time = flexibility_time[1:]
+
+                    # calculate flexibility for each node
+                    flexibility_regions = np.sum(flexibility_time, axis=0)
+                    # mean_flexibility = flexibility_regions / nregions
+                    graph_theory_measures[network]['flexibility'] = flexibility_regions
 
                     # Note: Because K-means will be performed over time and of the way
                     #  the data is defined all measures will need to transposed.
