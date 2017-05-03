@@ -87,38 +87,41 @@ def estimate_cost(N, G):
     return cost
 
 
-def calculate_healthy_optimal_k(input_basepath, output_basepath, network_type, window_size, window_type):
+def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_type, window_size, window_type,
+                                segmented_image_filename, segmented_regions_filename, preprocessing_output_basepath):
     #?Compute optimal threshold using this list of healthy subjects (n=20).
     subjects = [
         # FIXME: for testing purpuse use this subject
-          'sub-10159'
+        #     'sub-10159'
        # FIXME: run preprocessing and VOI extraction for this subjects
-        # 'sub-11067',
-        # 'sub-11068',
-        # 'sub-11077',
-        # 'sub-11088',
-        # 'sub-11090',
-        # 'sub-11097',
-        # 'sub-11098',
-        # 'sub-11104',
-        # 'sub-11105',
-        # 'sub-11106',
-        # 'sub-11108',
-        # 'sub-11112',
-        # 'sub-11121',
-        # 'sub-11122',
-        # 'sub-11128',
-        # 'sub-11131',
-        # 'sub-11142',
-        # 'sub-11143',
-        # 'sub-11149',
-        # 'sub-11156'
+            'sub-10624',
+            'sub-10629',
+            'sub-10631',
+            'sub-10638',
+            'sub-10674',
+            'sub-10678',
+            'sub-10680',
+            'sub-10686',
+            'sub-10692',
+            'sub-10697',
+            'sub-10704',
+            'sub-10707',
+            'sub-10708',
+            'sub-10719',
+            'sub-10724',
+            'sub-10746',
+            'sub-10762',
+            'sub-10779',
+            'sub-10785',
+            'sub-10788'
     ]
 
-    calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type)
+    extract_roi(subjects, network_type, preprocessing_output_basepath, segmented_image_filename, segmented_regions_filename,
+                roi_input_basepath)
+    calculate_dynamic_measures(subjects, roi_input_basepath, output_basepath, network_type, window_size, window_type)
 
     # Calculate how many networks keys there are.
-    nnetwork_keys = check_number_networks(subjects, input_basepath,
+    nnetwork_keys = check_number_networks(subjects, roi_input_basepath,
                                           network_type)
 
     # Calculate the optimal k for each subject's network.
@@ -211,6 +214,14 @@ def extract_roi(subjects,
         subject_path = os.path.join(output_basepath, subject)
         if not os.path.exists(subject_path):
             os.makedirs(subject_path)
+
+        # Early exit
+        if network_type == 'full_network' or 'between_network':
+            if os.path.exists(os.path.join(subject_path, network_type + '.txt')):
+                continue
+        elif network_type == 'within_network':
+            if os.path.exists(os.path.join(subject_path, network_type + '_9.txt')):
+                continue
 
         # Load the subject input image.
         image_filename = os.path.join(input_basepath, 'preprocessing_out', 'final_image', subject,
@@ -535,7 +546,10 @@ def data_analysis(subjects,
                   window_type,
                   data_analysis_type,
                   nclusters,
-                  rand_ind):
+                  rand_ind,
+                  segmented_image_filename,
+                  segmented_regions_filename,
+                  preprocessing_output_basepath):
     ''' Compute the main analysis. This function calculates the synchrony,
     metastability and perform the graph analysis.
 
@@ -573,7 +587,8 @@ def data_analysis(subjects,
         # Compute optimal threshold.
         # Note: subjects's id are hardcoded inside this function so that this subjects
         #       are not used for further analysis.
-        k_optima = calculate_healthy_optimal_k(input_basepath, output_basepath, network_type, window_size, window_type)
+        k_optima = calculate_healthy_optimal_k(input_basepath, output_basepath, network_type, window_size, window_type,
+                                               segmented_image_filename, segmented_regions_filename, preprocessing_output_basepath)
 
     # Calculate the Shannon entropy measures for every subject.
     for subject in subjects:
@@ -647,7 +662,7 @@ def data_analysis(subjects,
                 synchrony_bin = np.zeros((nregions, nregions, ntpoints))
                 for t in range(ntpoints):
                     for index in indices:
-                        if synchrony[network][index[0], index[1], t] >= k_optima[network]:
+                        if synchrony[network][index[0], index[1], t] >= np.mean(k_optima[network]):
                             synchrony_bin[index[0], index[1], t] = 1
                     synchrony_bin[:, :, t] = mirror_array(synchrony_bin[:, :, t])
                 synchrony_bins[network] = synchrony_bin
