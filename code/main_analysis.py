@@ -1,7 +1,6 @@
 #!/share/apps/anaconda/bin/python
 
 import os
-import numpy as np
 from argparse import ArgumentParser
 
 # FIXME: Move to extract_roi.py
@@ -21,28 +20,6 @@ data_path = os.path.join(os.path.sep, 'group', 'scz_dynamics')
 # FIXME: Move to data_in folder.
 subjects_filename = 'subjects.json'
 
-# Pre-processing
-# This folder contains all subjects' folders for the pre-processing phase.
-preprocessing_input_basepath = os.path.join(data_path, 'data_in', 'reconall_data')
-preprocessing_output_basepath = os.path.join(data_path, 'data_out')
-
-# ROI extraction
-# Input image for ROI extraction
-roi_input_segmented_image_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
-# Input region list for ROI extraction
-roi_input_segmented_regions_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'LookupTable')
-# Image where between_network and within_network are specified.
-roi_input_network_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
-# For each subject, this folder will contain a folder with the extracted ROI.
-roi_output_basepath = os.path.join(data_path, 'data_out', 'extract_roi')
-
-# Data analysis
-data_analysis_input_basepath = roi_output_basepath
-data_analysis_output_basepath = os.path.join(data_path, 'data_out', 'data_analysis')
-
-# Group data analysis
-group_analysis_input_basepath = data_analysis_output_basepath
-group_analysis_output_basepath = os.path.join(data_path, 'data_out', 'group_analysis')
 
 ################################################################################
 # Parameters
@@ -52,6 +29,7 @@ network_types = ['between_network', 'within_network', 'full_network']
 window_types = ['non-sliding', 'sliding']
 data_analysis_types = ['BOLD', 'synchrony', 'graph_analysis']
 group_analysis_types = ['hutchenson', 'ttest', '1ANOVA']
+analysis_types = ['rest', 'task']
 
 # When called from the command line:
 if __name__ == '__main__':
@@ -125,6 +103,12 @@ if __name__ == '__main__':
         choices=group_analysis_types,
         help='Group analysis type. Choose from: ' + ', '.join(group_analysis_types)
     )
+    parser.add_argument(
+        '--analysis-type', required=True,
+        dest='analysis_type', metavar='ANALYSIS_TYPE',
+        choices=analysis_types,
+        help='Analysis type. Choose from: ' + ', '.join(analysis_types)
+    )
     args = parser.parse_args()
 
     # Load subjects.
@@ -132,6 +116,30 @@ if __name__ == '__main__':
     # Note: If the user didn't specify nsubjects, we take all subjects (still
     #       balanced).
     subjects = load_subjects(subjects_filename, args.nsubjects)
+
+    # Path Settings
+    # Pre-processing
+    # This folder contains all subjects' folders for the pre-processing phase.
+    preprocessing_input_basepath = os.path.join(data_path, 'data_in', 'reconall_data')
+    preprocessing_output_basepath = os.path.join(data_path, 'data_out')
+
+    # ROI extraction
+    # Input image for ROI extraction
+    roi_input_segmented_image_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
+    # Input region list for ROI extraction
+    roi_input_segmented_regions_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'LookupTable')
+    # Image where between_network and within_network are specified.
+    roi_input_network_filename = os.path.join(data_path, 'data_in', 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
+    # For each subject, this folder will contain a folder with the extracted ROI.
+    roi_output_basepath = os.path.join(data_path, 'data_out', args.analysis_type, 'extract_roi')
+
+    # Data analysis
+    data_analysis_input_basepath = roi_output_basepath
+    data_analysis_output_basepath = os.path.join(data_path, 'data_out', args.analysis_type, 'data_analysis')
+
+    # Group data analysis
+    group_analysis_input_basepath = data_analysis_output_basepath
+    group_analysis_output_basepath = os.path.join(data_path, 'data_out', args.analysis_type, 'group_analysis')
 
     ############################################################################
     # Pre-processing
