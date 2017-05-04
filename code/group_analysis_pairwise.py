@@ -9,7 +9,6 @@ import os
 import csv
 import itertools
 from scipy import stats
-from math import log, sqrt
 
 
 def group_analysis_subject_basepath(basepath,
@@ -91,6 +90,14 @@ def group_analysis_pairwise(subjects,
                                          'nclusters_%s' % nclusters,
                                          'rand_ind_%d' % rand_ind,
                                          'graph_analysis_shannon_entropy_measures.pickle')
+            # load data for flexibilty
+            graph_measures_path = os.path.join(subject_basepath,
+                                            'nclusters_%s' % nclusters,
+                                            'rand_ind_%d' % rand_ind,
+                                            'graph_analysis_measures.pickle')
+
+            data_flexibility = pickle.load(open(graph_measures_path, 'rb'))
+
         elif data_analysis_type == 'synchrony':
             data_filepath = os.path.join(subject_basepath,
                                          'nclusters_%s' % nclusters,
@@ -113,6 +120,10 @@ def group_analysis_pairwise(subjects,
                         if parameter not in healthy_parameters[network][measure]:
                             healthy_parameters[network][measure][parameter] = []
                         healthy_parameters[network][measure][parameter].append(data[network][measure][parameter])
+                if 'flexibility' not in healthy_parameters[network]:
+                    healthy_parameters[network]['flexibility'] = {}
+                    healthy_parameters[network]['flexibility']['mean'] = []
+                healthy_parameters[network]['flexibility']['mean'].append(data_flexibility[network]['flexibility'])
             elif int(subject.strip('sub-')) > 50000:
                 if network not in schizo_parameters:
                     schizo_parameters[network] = {}
@@ -123,6 +134,10 @@ def group_analysis_pairwise(subjects,
                         if parameter not in schizo_parameters[network][measure]:
                             schizo_parameters[network][measure][parameter] = []
                         schizo_parameters[network][measure][parameter].append(data[network][measure][parameter])
+                if 'flexibility' not in schizo_parameters[network]:
+                    schizo_parameters[network]['flexibility'] = {}
+                    schizo_parameters[network]['flexibility']['mean'] = []
+                schizo_parameters[network]['flexibility']['mean'].append(data_flexibility[network]['flexibility'])
             else:
                  raise ValueError('Unexpected subject ID: %s.' % (subject))
 
@@ -131,13 +146,13 @@ def group_analysis_pairwise(subjects,
     ########################################################################
     print('* RESULTS')
     results = {}
-    for network in data:
+    for network in healthy_parameters:
         print('Network: %d' % (network))
         results[network] = {}
-        for measure in measures:
+        for measure in healthy_parameters[network].keys():
             print('  Measure: %s' % (measure))
             results[network][measure] = {}
-            for parameter in parameters:
+            for parameter in healthy_parameters[network][measure].keys():
                 print('    Parameter: %s' % (parameter))
                 results[network][measure][parameter] = []
                 results[network][measure][parameter + '_std'] = []
@@ -156,16 +171,16 @@ def group_analysis_pairwise(subjects,
                           (p12, 'significant' if p12 < significancy else 'not significant'))
 
             # Save all entropy values into a CSV file, just because.
-            entropy_filename = data_analysis_type + '_' + measure + '_entropy_network_%d.csv' % (network)
-            entropy_filepath = os.path.join(group_path, entropy_filename)
-            entropy = {
-                'Healthy': healthy_parameters[network][measure]['entropy'],
-                'Schizo': schizo_parameters[network][measure]['entropy']
+            group_results_filename = data_analysis_type + '_' + measure + '_' + parameter + '_network_%d.csv' % (network)
+            group_results_filepath = os.path.join(group_path, group_results_filename)
+            group_results = {
+                'Healthy': healthy_parameters[network][measure][parameter],
+                'Schizo': schizo_parameters[network][measure][parameter]
             }
-            with open(entropy_filepath, 'wb') as outfile:
+            with open(group_results_filepath, 'wb') as outfile:
                 writer = csv.writer(outfile)
-                writer.writerow(entropy.keys())
-                writer.writerows(itertools.izip_longest(*entropy.values()))
+                writer.writerow(group_results.keys())
+                writer.writerows(itertools.izip_longest(*group_results.values()))
     print('')
 
     print('--------------------------------------------------------------------')
