@@ -13,5 +13,10 @@ def load_subjects(filename, nsubjects=None):
     nsubjects = min(len(subjects_healthy),
                     len(subjects_schizo),
                     nsubjects)
-    print('Selected %d subjects.' % (2 * nsubjects))
+    print('--------------------------------------------------------------------')
+    print(' Subjects')
+    print('--------------------------------------------------------------------')
+    print('')
+    print('TOT number of subjects:        %d'  %(2 * nsubjects))
+    print('')
     return subjects_healthy[:nsubjects] + subjects_schizo[:nsubjects]

@@ -166,7 +166,8 @@ if __name__ == '__main__':
                     roi_input_segmented_image_filename,
                     roi_input_segmented_regions_filename,
                     roi_output_basepath,
-                    network_mask_filename=roi_input_network_filename)
+                    network_mask_filename=roi_input_network_filename,
+                    pipeline_call=True)
 
     ############################################################################
     # Data analysis

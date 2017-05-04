@@ -118,8 +118,9 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_typ
     ]
 
     extract_roi(subjects, network_type, preprocessing_output_basepath, segmented_image_filename, segmented_regions_filename,
-                roi_input_basepath)
-    calculate_dynamic_measures(subjects, roi_input_basepath, output_basepath, network_type, window_size, window_type)
+                roi_input_basepath, pipeline_call=False)
+    calculate_dynamic_measures(subjects, roi_input_basepath, output_basepath, network_type, window_size, window_type,
+                               pipeline_call=False)
 
     # Calculate how many networks keys there are.
     nnetwork_keys = check_number_networks(subjects, roi_input_basepath,
@@ -167,7 +168,8 @@ def extract_roi(subjects,
                 segmented_image_filename,
                 segmented_regions_filename,
                 output_basepath,
-                network_mask_filename=None):
+                network_mask_filename=None,
+                pipeline_call=True):
     """
     Iterate over all subjects and all regions (specified by the segmented_image).
      For each region find the correspoding BOLD signal. To reduce the
@@ -217,7 +219,7 @@ def extract_roi(subjects,
         if not os.path.exists(subject_path):
             os.makedirs(subject_path)
 
-        # Early exit
+        # Check if ROIs has been extracted in case yes, early exit
         if network_type == 'full_network' or 'between_network':
             if os.path.exists(os.path.join(subject_path, network_type + '.txt')):
                 continue
@@ -226,20 +228,21 @@ def extract_roi(subjects,
                 continue
 
         # Load the subject input image.
-        image_filename = os.path.join(input_basepath, 'preprocessing_out', 'final_image', subject,
+        image_filename = os.path.join(input_basepath, 'task', 'preprocessing_out', 'final_image', subject,
                                       preprocessed_image_filename)
         image = nib.load(image_filename)
         image_data = image.get_data()
         ntpoints = image_data.shape[3]
 
-        print('--------------------------------------------------------------------')
-        print(' Extract ROI')
-        print('--------------------------------------------------------------------')
-        print('')
-        print('* PARAMETERS')
-        print('Subject ID:        %s' %(subject))
-        print('network type:        %s' %(network_type))
-        print('')
+        if pipeline_call:
+            print('--------------------------------------------------------------------')
+            print(' Extract ROI')
+            print('--------------------------------------------------------------------')
+            print('')
+            print('* PARAMETERS')
+            print('Subject ID:        %s' %(subject))
+            print('network type:      %s' %(network_type))
+            print('')
 
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
@@ -343,17 +346,19 @@ def check_number_networks(subjects, input_basepath, network_type):
     return nnetwork_keys
 
 
-def calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type):
+def calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type,
+                               pipeline_call=True):
     # Find number of network for dataset
     nnetwork_keys = check_number_networks(subjects, input_basepath, network_type)
 
     # Compute synchrony, metastability and mean synchrony for each subject, both
     # globally and pairwise.
-    print('* DYNAMIC MEASURES')
+    if pipeline_call:
+        print('* DYNAMIC MEASURES')
 
     for subject in subjects:
-
-        print('Subject ID:        %s' %(subject))
+        if pipeline_call:
+            print('Subject ID:        %s' %(subject))
 
         # Calculate Hilbert transform for the network(s).
         # Import ROI data for each VOI.
@@ -407,7 +412,8 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
         pickle.dump(dynamic_measures,
                     open(os.path.join(subject_path, 'dynamic_measures.pickle'),
                          'wb'))
-        print('    Done')
+        if pipeline_call:
+            print('    Done')
 
 
 def compute_hilbert_tranform(data, TR=2, upper_bound=0.1, lower_bound=0.04):
@@ -851,5 +857,3 @@ def data_analysis(subjects,
                                  (data_analysis_type))
 
 
-            print('Done!')
-            print ('--------------------------------------------------------------')
