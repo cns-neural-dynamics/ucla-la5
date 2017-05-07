@@ -2,6 +2,7 @@
 # -*- coding: ascii -*-
 from __future__ import division
 
+import logging
 import matplotlib
 matplotlib.use('Agg')  # allow generation of images without user interface
 import matplotlib.pyplot as plt
@@ -154,12 +155,12 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_typ
 
     # Find optimal mean of healthy subjects.
     k_optima = {}
-    print('')
-    print ('* OPTIMAL MEAN THRESHOLD:')
+    logging.info('')
+    logging.info('* OPTIMAL MEAN THRESHOLD:')
     for network in range(nnetwork_keys):
         k_optima[network] = np.mean(healthy_k_optima[network])
-        print('Network %d: %3f' % (network, k_optima[network]))
-    print('')
+        logging.info('Network %d: %3f' % (network, k_optima[network]))
+    logging.info('')
     return healthy_k_optima
 
 def extract_roi(subjects,
@@ -235,14 +236,14 @@ def extract_roi(subjects,
         ntpoints = image_data.shape[3]
 
         if pipeline_call:
-            print('--------------------------------------------------------------------')
-            print(' Extract ROI')
-            print('--------------------------------------------------------------------')
-            print('')
-            print('* PARAMETERS')
-            print('Subject ID:        %s' %(subject))
-            print('network type:      %s' %(network_type))
-            print('')
+            logging.info('--------------------------------------------------------------------')
+            logging.info(' Extract ROI')
+            logging.info('--------------------------------------------------------------------')
+            logging.info('')
+            logging.info('* PARAMETERS')
+            logging.info('Subject ID:        %s' %(subject))
+            logging.info('network type:      %s' %(network_type))
+            logging.info('')
 
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
@@ -354,11 +355,11 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
     # Compute synchrony, metastability and mean synchrony for each subject, both
     # globally and pairwise.
     if pipeline_call:
-        print('* DYNAMIC MEASURES')
+        logging.info('* DYNAMIC MEASURES')
 
     for subject in subjects:
         if pipeline_call:
-            print('Subject ID:        %s' %(subject))
+            logging.info('Subject ID:        %s' %(subject))
 
         # Calculate Hilbert transform for the network(s).
         # Import ROI data for each VOI.
@@ -413,7 +414,7 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
                     open(os.path.join(subject_path, 'dynamic_measures.pickle'),
                          'wb'))
         if pipeline_call:
-            print('    Done')
+            logging.info('    Done')
 
 
 def compute_hilbert_tranform(data, TR=2, upper_bound=0.1, lower_bound=0.04):
@@ -602,18 +603,18 @@ def data_analysis(subjects,
 
     window_size = 5
 
-    print('--------------------------------------------------------------------')
-    print(' Data Analysis')
-    print('--------------------------------------------------------------------')
-    print('')
-    print('* PARAMETERS')
-    print('Network type:        %s' %(network_type))
-    print('Window type:         %s' %(window_type))
-    print('Window size:         %d' %(window_size))
-    print('Data analysis type:  %s' %(data_analysis_type))
-    print('Nclusters:           %d' %(nclusters))
-    print('Rand_ind:            %d' %(rand_ind))
-    print('')
+    logging.info('--------------------------------------------------------------------')
+    logging.info(' Data Analysis')
+    logging.info('--------------------------------------------------------------------')
+    logging.info('')
+    logging.info('* PARAMETERS')
+    logging.info('Network type:        %s' %(network_type))
+    logging.info('Window type:         %s' %(window_type))
+    logging.info('Window size:         %d' %(window_size))
+    logging.info('Data analysis type:  %s' %(data_analysis_type))
+    logging.info('Nclusters:           %d' %(nclusters))
+    logging.info('Rand_ind:            %d' %(rand_ind))
+    logging.info('')
 
     calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type)
 

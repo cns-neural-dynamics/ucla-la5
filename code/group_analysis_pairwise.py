@@ -8,6 +8,7 @@ import pickle
 import os
 import csv
 import itertools
+import logging
 from scipy import stats
 
 
@@ -33,18 +34,18 @@ def group_analysis_pairwise(subjects,
                             rand_ind,
                             significancy=.05):
 
-    print('--------------------------------------------------------------------')
-    print(' Group analysis')
-    print('--------------------------------------------------------------------')
-    print('')
-    print('* PARAMETERS')
-    print('network type:        %s' %(network_type))
-    print('windowk type:        %s' %(window_type))
-    print('data analysis type:  %s' %(data_analysis_type))
-    print('group analysis type: %s' %(group_analysis_type))
-    print('nclusters:           %d' %(nclusters))
-    print('rand_ind:            %d' %(rand_ind))
-    print('')
+    logging.info('--------------------------------------------------------------------')
+    logging.info(' Group analysis')
+    logging.info('--------------------------------------------------------------------')
+    logging.info('')
+    logging.info('* PARAMETERS')
+    logging.info('network type:        %s' %(network_type))
+    logging.info('windowk type:        %s' %(window_type))
+    logging.info('data analysis type:  %s' %(data_analysis_type))
+    logging.info('group analysis type: %s' %(group_analysis_type))
+    logging.info('nclusters:           %d' %(nclusters))
+    logging.info('rand_ind:            %d' %(rand_ind))
+    logging.info('')
 
     # Parameters of interest for the different data analysis types.
     if data_analysis_type == 'graph_analysis':
@@ -144,30 +145,30 @@ def group_analysis_pairwise(subjects,
     ########################################################################
     # Results generation
     ########################################################################
-    print('* RESULTS')
+    logging.info('* RESULTS')
     results = {}
     for network in healthy_parameters:
-        print('Network: %d' % (network))
+        logging.info('Network: %d' % (network))
         results[network] = {}
         for measure in healthy_parameters[network].keys():
-            print('  Measure: %s' % (measure))
+            logging.info('  Measure: %s' % (measure))
             results[network][measure] = {}
             for parameter in healthy_parameters[network][measure].keys():
-                print('    Parameter: %s' % (parameter))
+                logging.info('    Parameter: %s' % (parameter))
                 results[network][measure][parameter] = []
                 results[network][measure][parameter + '_std'] = []
                 for group in [healthy_parameters, schizo_parameters]:
-                    print('      Subjects: %s' % ('healthy' if group == healthy_parameters else 'schizo'))
+                    logging.info('      Subjects: %s' % ('healthy' if group == healthy_parameters else 'schizo'))
                     results[network][measure][parameter].append(np.mean(group[network][measure][parameter]))
                     results[network][measure][parameter + '_std'].append(np.std(group[network][measure][parameter]))
-                    print('        Mean: %f' % (results[network][measure][parameter][-1]))
-                    print('        STD:  %f' % (results[network][measure][parameter + '_std'][-1]))
+                    logging.info('        Mean: %f' % (results[network][measure][parameter][-1]))
+                    logging.info('        STD:  %f' % (results[network][measure][parameter + '_std'][-1]))
 
                 if group_analysis_type == 'ttest':
                     t12, p12 = stats.ttest_ind(healthy_parameters[network][measure][parameter],
                                                schizo_parameters[network][measure][parameter])
-                    print('      t-value: %f' % (t12))
-                    print('      p-value: %f (difference between HC and SC: %s)' %
+                    logging.info('      t-value: %f' % (t12))
+                    logging.info('      p-value: %f (difference between HC and SC: %s)' %
                           (p12, 'significant' if p12 < significancy else 'not significant'))
 
             # Save all entropy values into a CSV file, just because.
@@ -181,11 +182,11 @@ def group_analysis_pairwise(subjects,
                 writer = csv.writer(outfile)
                 writer.writerow(group_results.keys())
                 writer.writerows(itertools.izip_longest(*group_results.values()))
-    print('')
+    logging.info('')
 
-    print('--------------------------------------------------------------------')
-    print('')
-    print('')
+    logging.info('--------------------------------------------------------------------')
+    logging.info('')
+    logging.info('')
     return
 
     #------------------------------------------------------------------------------
@@ -195,14 +196,14 @@ def group_analysis_pairwise(subjects,
     ind = np.arange(ngroups)
     width = 0.7
     if data_analysis_type == 'synchrony' or data_analysis_type == 'BOLD':
-        print('plotting and saving %s' %parameters_s)
+        logging.info('plotting and saving %s' %parameters_s)
         fig, ax = plt.subplots()
         ax.bar(ind, parameters, width, yerr=parameters_std,
             ecolor='black', # black error bar
             alpha=0.5,      # transparency
             align='center')
     elif data_analysis_type == 'graph_theory':
-            print('plotting and saving %s' %parameters_s[element])
+            logging.info('plotting and saving %s' %parameters_s[element])
             fig, ax = plt.subplots()
             ax.bar(ind, parameters[element], width, yerr=parameters_std[element],
                 ecolor='black', # black error bar
