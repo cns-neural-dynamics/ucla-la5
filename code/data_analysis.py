@@ -90,8 +90,10 @@ def estimate_cost(N, G):
 
 
 def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_type, window_size, window_type,
+                                data_analysis_type, nclusters, rand_ind,
                                 segmented_image_filename, segmented_regions_filename, preprocessing_output_basepath):
     #?Compute optimal threshold using this list of healthy subjects (n=20).
+    # FIXME: Pass these golden subjects as an input to the function.
     subjects = [
         # FIXME: for testing purpuse use this subject
         #     'sub-10159'
@@ -121,7 +123,7 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_typ
     extract_roi(subjects, network_type, preprocessing_output_basepath, segmented_image_filename, segmented_regions_filename,
                 roi_input_basepath, pipeline_call=False)
     calculate_dynamic_measures(subjects, roi_input_basepath, output_basepath, network_type, window_size, window_type,
-                               pipeline_call=False)
+                               data_analysis_type, nclusters, rand_ind, pipeline_call=False)
 
     # Calculate how many networks keys there are.
     nnetwork_keys = check_number_networks(subjects, roi_input_basepath,
@@ -134,6 +136,9 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_typ
         subject_path = data_analysis_subject_basepath(output_basepath,
                                                       network_type,
                                                       window_type,
+                                                      data_analysis_type,
+                                                      nclusters,
+                                                      rand_ind,
                                                       subject)
         dynamic_measures = pickle.load(
             open(os.path.join(subject_path, 'dynamic_measures.pickle'),
@@ -348,7 +353,7 @@ def check_number_networks(subjects, input_basepath, network_type):
 
 
 def calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type,
-                               pipeline_call=True):
+                               data_analysis_type, nclusters, rand_ind, pipeline_call=True):
     # Find number of network for dataset
     nnetwork_keys = check_number_networks(subjects, input_basepath, network_type)
 
@@ -407,6 +412,7 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
         # Dump results for all networks, for this subject, into a pickle file.
         subject_path = data_analysis_subject_basepath(output_basepath,
                                                       network_type, window_type,
+                                                      data_analysis_type, nclusters, rand_ind,
                                                       subject)
         if not os.path.exists(subject_path):
             os.makedirs(subject_path)
@@ -558,9 +564,16 @@ def bold_plot_threshold(data, n_regions, threshold=1.3):
 def data_analysis_subject_basepath(basepath,
                                    network_type,
                                    window_type,
+                                   data_analysis_type,
+                                   nclusters,
+                                   rand_ind,
                                    subject):
-    return os.path.join(basepath, network_type, window_type, subject)
-
+    subject_base_path = os.path.join(basepath, network_type, window_type, data_analysis_type,
+                                     'nclusters_%d' % nclusters)
+    if data_analysis_type == 'graph_analysis':
+        return os.path.join(subject_base_path, 'rand_ind_%d' % rand_ind, subject)
+    else:
+        return os.path.join(subject_base_path, subject)
 
 def data_analysis(subjects,
                   input_basepath,
@@ -616,7 +629,8 @@ def data_analysis(subjects,
     logging.info('Rand_ind:            %d' %(rand_ind))
     logging.info('')
 
-    calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type)
+    calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type,
+                               data_analysis_type, nclusters, rand_ind)
 
     # Calculate the optimal k from the healthy subjects only.
     # Note: This is not needed with the BOLD data analysis. The optimal k will
@@ -626,6 +640,7 @@ def data_analysis(subjects,
         # Note: subjects's id are hardcoded inside this function so that this subjects
         #       are not used for further analysis.
         k_optima = calculate_healthy_optimal_k(input_basepath, output_basepath, network_type, window_size, window_type,
+                                               data_analysis_type, nclusters, rand_ind,
                                                segmented_image_filename, segmented_regions_filename, preprocessing_output_basepath)
 
     # Calculate the Shannon entropy measures for every subject.
@@ -634,6 +649,9 @@ def data_analysis(subjects,
         subject_path = data_analysis_subject_basepath(output_basepath,
                                                       network_type,
                                                       window_type,
+                                                      data_analysis_type,
+                                                      nclusters,
+                                                      rand_ind,
                                                       subject)
         if not os.path.exists(subject_path):
             os.makedirs(subject_path)
@@ -664,11 +682,8 @@ def data_analysis(subjects,
 
             # Calculate Shannon Entropy.
             bold_shannon_entropy[network][measure]['entropy'] = entropy(kmeans_bold_labels)
-            save_path = os.path.join(subject_path, 'nclusters_%d' % (nclusters))
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
             pickle.dump(bold_shannon_entropy,
-                        open(os.path.join(save_path, 'bold_shannon.pickle'),
+                        open(os.path.join(subject_path, 'bold_shannon.pickle'),
                              'wb'))
         else:
             # This first part of the code is common to the synchrony and graph
@@ -731,12 +746,8 @@ def data_analysis(subjects,
                     }
 
                 # Dump the results in a pickle file.
-                save_path = os.path.join(subject_path,
-                                         'nclusters_%d' % (nclusters))
-                if not os.path.exists(save_path):
-                    os.makedirs(save_path)
                 pickle.dump(shannon_entropy_measures,
-                            open(os.path.join(save_path,
+                            open(os.path.join(subject_path,
                                               'synchrony_shannon_entropy_measures.pickle'),
                                  'wb'))
             elif data_analysis_type == 'graph_analysis':
@@ -836,25 +847,18 @@ def data_analysis(subjects,
 
 
                 # Dump results into three pickle files.
-                save_path = os.path.join(subject_path,
-                                         'nclusters_%d' % (nclusters),
-                                         'rand_ind_%d' % (rand_ind))
-                if not os.path.exists(save_path):
-                    os.makedirs(save_path)
                 pickle.dump(graph_theory_measures,
-                            open(os.path.join(save_path,
+                            open(os.path.join(subject_path,
                                               'graph_analysis_measures.pickle'),
                                  'wb'))
                 pickle.dump(shannon_entropy_measures,
-                            open(os.path.join(save_path,
+                            open(os.path.join(subject_path,
                                               'graph_analysis_shannon_entropy_measures.pickle'),
                                  'wb'))
                 pickle.dump(networks_global_efficiency,
-                            open(os.path.join(save_path,
+                            open(os.path.join(subject_path,
                                               'global_efficiency.pickle'),
                                  'wb'))
             else:
                 raise ValueError('Unrecognised data analysis type: %s' %
                                  (data_analysis_type))
-
-

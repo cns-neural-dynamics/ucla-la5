@@ -11,17 +11,24 @@ import itertools
 import logging
 from scipy import stats
 
-
-def group_analysis_subject_basepath(basepath,
-                                    network_type,
-                                    window_type,
-                                    subject):
-    return os.path.join(basepath, network_type, window_type, subject)
+from data_analysis import data_analysis_subject_basepath
 
 def group_analysis_group_basepath(basepath,
                                   network_type,
-                                  window_type):
-    return os.path.join(basepath, network_type, window_type)
+                                  window_type,
+                                  data_analysis_type,
+                                  nclusters,
+                                  rand_ind,
+                                  group_analysis_type):
+    group_basepath = data_analysis_subject_basepath(basepath,
+                                                    network_type,
+                                                    window_type,
+                                                    data_analysis_type,
+                                                    nclusters,
+                                                    rand_ind,
+                                                    'dummy')
+    group_basepath = os.path.split(group_basepath)[0]
+    return os.path.join(group_basepath, group_analysis_type)
 
 def group_analysis_pairwise(subjects,
                             input_basepath,
@@ -58,21 +65,15 @@ def group_analysis_pairwise(subjects,
     parameters = ['entropy']
 
     # Generate the output folders.
-    group_path = group_analysis_group_basepath(output_basepath,
-                                               network_type,
-                                               window_type)
-    if data_analysis_type == 'graph_analysis':
-        group_path = os.path.join(group_path,
-                                  'nclusters_%s' % nclusters,
-                                  'rand_ind_%d' % rand_ind)
-    elif data_analysis_type == 'synchrony':
-        group_path = os.path.join(group_path,
-                                  'nclusters_%s' % nclusters)
-    elif data_analysis_type == 'BOLD':
-        group_path = os.path.join(group_path,
-                                  'nclusters_%s' % nclusters)
-    if not os.path.isdir(group_path):
-        os.makedirs(group_path)
+    group_output_basepath = group_analysis_group_basepath(output_basepath,
+                                                          network_type,
+                                                          window_type,
+                                                          data_analysis_type,
+                                                          nclusters,
+                                                          rand_ind,
+                                                          group_analysis_type)
+    if not os.path.isdir(group_output_basepath):
+        os.makedirs(group_output_basepath)
 
     ########################################################################
     # Input aggregation
@@ -82,30 +83,29 @@ def group_analysis_pairwise(subjects,
     schizo_parameters = {}
     for subject in subjects:
         # Extract the input data.
-        subject_basepath = group_analysis_subject_basepath(input_basepath,
-                                                           network_type,
-                                                           window_type,
-                                                           subject)
+        subject_basepath = data_analysis_subject_basepath(input_basepath,
+                                                          network_type,
+                                                          window_type,
+                                                          data_analysis_type,
+                                                          nclusters,
+                                                          rand_ind,
+                                                          subject)
+        if not os.path.isdir(subject_basepath):
+            raise IOError('Input folder not found: %s. Have you run the data analysis yet?' %
+                          subject_basepath)
         if data_analysis_type == 'graph_analysis':
             data_filepath = os.path.join(subject_basepath,
-                                         'nclusters_%s' % nclusters,
-                                         'rand_ind_%d' % rand_ind,
                                          'graph_analysis_shannon_entropy_measures.pickle')
             # load data for flexibilty
             graph_measures_path = os.path.join(subject_basepath,
-                                            'nclusters_%s' % nclusters,
-                                            'rand_ind_%d' % rand_ind,
-                                            'graph_analysis_measures.pickle')
-
+                                               'graph_analysis_measures.pickle')
             data_flexibility = pickle.load(open(graph_measures_path, 'rb'))
 
         elif data_analysis_type == 'synchrony':
             data_filepath = os.path.join(subject_basepath,
-                                         'nclusters_%s' % nclusters,
                                          'synchrony_shannon_entropy_measures.pickle')
         elif data_analysis_type == 'BOLD':
             data_filepath = os.path.join(subject_basepath,
-                                         'nclusters_%s' % nclusters,
                                          'bold_shannon.pickle')
         data = pickle.load(open(data_filepath, 'rb'))
 
@@ -172,8 +172,8 @@ def group_analysis_pairwise(subjects,
                           (p12, 'significant' if p12 < significancy else 'not significant'))
 
             # Save all entropy values into a CSV file, just because.
-            group_results_filename = data_analysis_type + '_' + measure + '_' + parameter + '_network_%d.csv' % (network)
-            group_results_filepath = os.path.join(group_path, group_results_filename)
+            group_results_filename = measure + '_' + parameter + '_network_%d.csv' % (network)
+            group_results_filepath = os.path.join(group_output_basepath, group_results_filename)
             group_results = {
                 'Healthy': healthy_parameters[network][measure][parameter],
                 'Schizo': schizo_parameters[network][measure][parameter]
@@ -239,7 +239,6 @@ def group_analysis_pairwise(subjects,
         # increase font size
         plt.rcParams.update({'font.size': 28})
         plt.tight_layout()
-        plt.savefig(os.path.join(output_basepath, network_type, 'rand_ind_%02d' % rand_ind,
-            'group_comparison', '%02d_clusters' % nclusters,
-            ''.join([parameters_s[element], '_%s.png' % group_analysis_type])))
+        plt.savefig(os.path.join(group_output_basepath,
+                                 ''.join([parameters_s[element], '.png'])))
         plt.close('all')
