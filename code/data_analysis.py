@@ -89,41 +89,8 @@ def estimate_cost(N, G):
     return cost
 
 
-def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_type, window_size, window_type,
-                                data_analysis_type, nclusters, rand_ind,
-                                segmented_image_filename, segmented_regions_filename, preprocessing_output_basepath):
-    #?Compute optimal threshold using this list of healthy subjects (n=20).
-    # FIXME: Pass these golden subjects as an input to the function.
-    subjects = [
-        # FIXME: for testing purpuse use this subject
-        #     'sub-10159'
-       # FIXME: run preprocessing and VOI extraction for this subjects
-            'sub-10624',
-            'sub-10629',
-            'sub-10631',
-            'sub-10638',
-            'sub-10674',
-            'sub-10678',
-            'sub-10680',
-            'sub-10686',
-            'sub-10692',
-            'sub-10697',
-            'sub-10704',
-            'sub-10707',
-            'sub-10708',
-            'sub-10719',
-            'sub-10724',
-            'sub-10746',
-            'sub-10762',
-            'sub-10779',
-            'sub-10785',
-            'sub-10788'
-    ]
-
-    extract_roi(subjects, network_type, preprocessing_output_basepath, segmented_image_filename, segmented_regions_filename,
-                roi_input_basepath, pipeline_call=False)
-    calculate_dynamic_measures(subjects, roi_input_basepath, output_basepath, network_type, window_size, window_type,
-                               data_analysis_type, nclusters, rand_ind, pipeline_call=False)
+def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, subjects, network_type, window_size, window_type,
+                                data_analysis_type, nclusters, rand_ind):
 
     # Calculate how many networks keys there are.
     nnetwork_keys = check_number_networks(subjects, roi_input_basepath,
@@ -166,7 +133,15 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, network_typ
         k_optima[network] = np.mean(healthy_k_optima[network])
         logging.info('Network %d: %3f' % (network, k_optima[network]))
     logging.info('')
-    return healthy_k_optima
+
+    # Dump json file with optimal k and timestamp for the current analysis
+    output_path = os.path.split(subject_path)[0]
+    with open(os.path.join(output_path, 'optimal_k.json'), 'w') as json_file:
+        json.dump(healthy_k_optima, json_file, indent=4)
+
+    dump_golden_subjects_json(output_path, network_type, subjects, window_size, data_analysis_type)
+
+    return
 
 def extract_roi(subjects,
                 network_type,
@@ -174,8 +149,8 @@ def extract_roi(subjects,
                 segmented_image_filename,
                 segmented_regions_filename,
                 output_basepath,
-                network_mask_filename=None,
-                pipeline_call=True):
+                golden_subjects,
+                network_mask_filename=None):
     """
     Iterate over all subjects and all regions (specified by the segmented_image).
      For each region find the correspoding BOLD signal. To reduce the
@@ -316,6 +291,9 @@ def extract_roi(subjects,
                            avg, delimiter=' ', fmt='%5e')
             else:
                 raise ValueError('Unrecognised network type: %s.' % (network_type))
+
+    # Dump json with parameters of the roi extraction.
+    dump_extract_roi_json_(output_basepath, network_type, subjects, segmented_image_filename)
 
 
 def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mask, region):
@@ -583,9 +561,7 @@ def data_analysis(subjects,
                   data_analysis_type,
                   nclusters,
                   rand_ind,
-                  segmented_image_filename,
-                  segmented_regions_filename,
-                  preprocessing_output_basepath):
+                  golden_subjects):
     ''' Compute the main analysis. This function calculates the synchrony,
     metastability and perform the graph analysis.
 
@@ -626,10 +602,15 @@ def data_analysis(subjects,
     logging.info('Window size:         %d' %(window_size))
     logging.info('Data analysis type:  %s' %(data_analysis_type))
     logging.info('Nclusters:           %d' %(nclusters))
+    logging.info('Golden subjects      %s' %(golden_subjects))
     logging.info('Rand_ind:            %d' %(rand_ind))
     logging.info('')
 
-    calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type,
+    if golden_subjects:
+        input_path = os.path.join(input_basepath, 'golden_subjects')
+    else:
+        input_path = os.path.join(input_basepath, 'analysis_subjects')
+    calculate_dynamic_measures(subjects, input_path, output_basepath, network_type, window_size, window_type,
                                data_analysis_type, nclusters, rand_ind)
 
     # Calculate the optimal k from the healthy subjects only.
@@ -637,11 +618,18 @@ def data_analysis(subjects,
     #       be used later when computing the Shannon entropy measures.
     if data_analysis_type != 'BOLD':
         # Compute optimal threshold.
-        # Note: subjects's id are hardcoded inside this function so that this subjects
-        #       are not used for further analysis.
-        k_optima = calculate_healthy_optimal_k(input_basepath, output_basepath, network_type, window_size, window_type,
-                                               data_analysis_type, nclusters, rand_ind,
-                                               segmented_image_filename, segmented_regions_filename, preprocessing_output_basepath)
+        # Note: Golden subjects's id are hardcoded inside the json file and are not used for further analysis
+        if golden_subjects:
+            calculate_healthy_optimal_k(input_basepath, output_basepath, subjects, network_type, window_size, window_type,
+                                               data_analysis_type, nclusters, rand_ind)
+            return
+        else:
+            filepath = data_analysis_subject_basepath(output_basepath, network_type, window_type, data_analysis_type,
+                                                       nclusters, rand_ind, subjects[0])
+            filepath = os.path.join(os.path.split(filepath)[0], 'optimal_k.json')
+
+            with open(filepath) as f:
+                k_optima = json.load(f)
 
     # Calculate the Shannon entropy measures for every subject.
     for subject in subjects:
@@ -714,7 +702,7 @@ def data_analysis(subjects,
                 synchrony_bin = np.zeros((nregions, nregions, ntpoints))
                 for t in range(ntpoints):
                     for index in indices:
-                        if synchrony[network][index[0], index[1], t] >= np.mean(k_optima[network]):
+                        if synchrony[network][index[0], index[1], t] >= np.mean(k_optima[str(network)]):
                             synchrony_bin[index[0], index[1], t] = 1
                     synchrony_bin[:, :, t] = mirror_array(synchrony_bin[:, :, t])
                 synchrony_bins[network] = synchrony_bin
