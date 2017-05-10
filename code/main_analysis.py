@@ -33,6 +33,11 @@ parser.add_argument(
     choices=analysis_types,
     help='Analysis type. Choose from: ' + ', '.join(analysis_types)
 )
+parser.add_argument(
+    '-c' '--golden-subjects',
+    action='store_true', dest='golden_subjects',
+    help='Perform analysis with subset of healthy subjects'
+)
 # Number of subjects
 parser.add_argument(
     '-n', '--nsubjects',
@@ -173,7 +178,7 @@ from group_analysis_pairwise import group_analysis_pairwise
 # They must always be loaded, no matter the type of the analysis.
 # Note: If the user didn't specify nsubjects, we take all subjects (still
 #       balanced).
-subjects = load_subjects(subjects_filename, args.nsubjects)
+subjects = load_subjects(subjects_filename, args.golden_subjects, args.nsubjects)
 
 ############################################################################
 # Pre-processing
@@ -200,8 +205,8 @@ if args.extract_roi:
                 roi_input_segmented_image_filename,
                 roi_input_segmented_regions_filename,
                 roi_output_basepath,
-                network_mask_filename=roi_input_network_filename,
-                pipeline_call=True)
+                args.golden_subjects,
+                network_mask_filename=roi_input_network_filename)
 
 ############################################################################
 # Data analysis
@@ -228,9 +233,7 @@ if args.analyse_data:
                   args.data_analysis_type,
                   args.nclusters,
                   args.rand_ind,
-                  roi_input_segmented_image_filename,
-                  roi_input_segmented_regions_filename,
-                  preprocessing_output_basepath)
+                  args.golden_subjects)
 
 
 ############################################################################
