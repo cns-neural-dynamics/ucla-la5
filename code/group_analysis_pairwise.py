@@ -47,7 +47,7 @@ def group_analysis_pairwise(subjects,
     logging.info('')
     logging.info('* PARAMETERS')
     logging.info('network type:        %s' %(network_type))
-    logging.info('windowk type:        %s' %(window_type))
+    logging.info('window type:         %s' %(window_type))
     logging.info('data analysis type:  %s' %(data_analysis_type))
     logging.info('group analysis type: %s' %(group_analysis_type))
     logging.info('nclusters:           %d' %(nclusters))
@@ -121,10 +121,11 @@ def group_analysis_pairwise(subjects,
                         if parameter not in healthy_parameters[network][measure]:
                             healthy_parameters[network][measure][parameter] = []
                         healthy_parameters[network][measure][parameter].append(data[network][measure][parameter])
-                if 'flexibility' not in healthy_parameters[network]:
-                    healthy_parameters[network]['flexibility'] = {}
-                    healthy_parameters[network]['flexibility']['mean'] = []
-                healthy_parameters[network]['flexibility']['mean'].append(data_flexibility[network]['flexibility'])
+                if data_analysis_type == 'graph_analysis':
+                    if 'flexibility' not in healthy_parameters[network]:
+                        healthy_parameters[network]['flexibility'] = {}
+                        healthy_parameters[network]['flexibility']['mean'] = []
+                    healthy_parameters[network]['flexibility']['mean'].append(data_flexibility[network]['flexibility'])
             elif int(subject.strip('sub-')) > 50000:
                 if network not in schizo_parameters:
                     schizo_parameters[network] = {}
@@ -135,10 +136,11 @@ def group_analysis_pairwise(subjects,
                         if parameter not in schizo_parameters[network][measure]:
                             schizo_parameters[network][measure][parameter] = []
                         schizo_parameters[network][measure][parameter].append(data[network][measure][parameter])
-                if 'flexibility' not in schizo_parameters[network]:
-                    schizo_parameters[network]['flexibility'] = {}
-                    schizo_parameters[network]['flexibility']['mean'] = []
-                schizo_parameters[network]['flexibility']['mean'].append(data_flexibility[network]['flexibility'])
+                if data_analysis_type == 'graph_analysis':
+                    if 'flexibility' not in schizo_parameters[network]:
+                        schizo_parameters[network]['flexibility'] = {}
+                        schizo_parameters[network]['flexibility']['mean'] = []
+                    schizo_parameters[network]['flexibility']['mean'].append(data_flexibility[network]['flexibility'])
             else:
                  raise ValueError('Unexpected subject ID: %s.' % (subject))
 
