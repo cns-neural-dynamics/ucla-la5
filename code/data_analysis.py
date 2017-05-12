@@ -3,6 +3,8 @@
 from __future__ import division
 
 import logging
+import time
+import json
 import matplotlib
 matplotlib.use('Agg')  # allow generation of images without user interface
 import matplotlib.pyplot as plt
@@ -19,6 +21,36 @@ from bct import (degrees_und, distance_bin, transitivity_bu, clustering_coef_bu,
                  randmio_und_connected, charpath, clustering, breadthdist, efficiency_bin,
                  community_louvain)
 from sklearn.cluster import KMeans
+
+
+def dump_extract_roi_json_(output_base_path, network_type, subjects, segmented_image_filename):
+    output_path = os.path.join(output_base_path, 'golden_subjects')
+
+    parameters_list = {}
+    timestamp = time.strftime("%Y%m%d%H%M%S")
+
+    parameters_list['timestamp'] = timestamp
+    parameters_list['network_type'] = network_type
+    parameters_list['subjects'] = subjects
+    parameters_list['segmentation_image'] = segmented_image_filename
+
+    # Dump json file.
+    with open(os.path.join(output_path, 'extract_roi.json'), 'w') as json_file:
+        json.dump(parameters_list, json_file, indent=4)
+
+def dump_golden_subjects_json(output_base_path, network_type, subjects, window_size, data_analysis_type):
+
+    parameters_list = {}
+    timestamp = time.strftime("%Y%m%d%H%M%S")
+
+    parameters_list['timestamp'] = timestamp
+    parameters_list['network_type'] = network_type
+    parameters_list['subjects'] = subjects
+    parameters_list['window_size'] = window_size
+    parameters_list['data_analysis_type'] = data_analysis_type
+
+    with open(os.path.join(output_base_path, 'golden_subjects.json'), 'w') as json_file:
+        json.dump(parameters_list, json_file, indent=4)
 
 
 def calculate_subject_optimal_k(mean_synchrony, indices, k_lower=0.1, k_upper=1.0, k_step=0.01):
@@ -193,10 +225,23 @@ def extract_roi(subjects,
 
     # Extract ROI for each subjects.
     preprocessed_image_filename = 'denoised_func_data_nonaggr_filt.nii.gz'
+
+    logging.info('--------------------------------------------------------------------')
+    logging.info(' Extract ROI')
+    logging.info('--------------------------------------------------------------------')
+    logging.info('')
+    logging.info('* PARAMETERS')
+    logging.info('network type:      %s' %(network_type))
+
     for subject in subjects:
+        logging.info('Subject ID:        %s' %(subject))
+        logging.info('')
 
         # Generate the output folder.
-        subject_path = os.path.join(output_basepath, subject)
+        if golden_subjects:
+            subject_path = os.path.join(output_basepath, 'golden_subjects', subject)
+        else:
+            subject_path = os.path.join(output_basepath, 'analysis_subjects', subject)
         if not os.path.exists(subject_path):
             os.makedirs(subject_path)
 
@@ -209,21 +254,12 @@ def extract_roi(subjects,
                 continue
 
         # Load the subject input image.
-        image_filename = os.path.join(input_basepath, 'task', 'preprocessing_out', 'final_image', subject,
+        image_filename = os.path.join(input_basepath, 'final_image', subject,
                                       preprocessed_image_filename)
         image = nib.load(image_filename)
         image_data = image.get_data()
         ntpoints = image_data.shape[3]
 
-        if pipeline_call:
-            logging.info('--------------------------------------------------------------------')
-            logging.info(' Extract ROI')
-            logging.info('--------------------------------------------------------------------')
-            logging.info('')
-            logging.info('* PARAMETERS')
-            logging.info('Subject ID:        %s' %(subject))
-            logging.info('network type:      %s' %(network_type))
-            logging.info('')
 
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
