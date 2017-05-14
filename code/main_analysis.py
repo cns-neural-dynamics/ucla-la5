@@ -169,7 +169,8 @@ log.addHandler(ch)
 # FIXME: Move extract_roi to extract_roi.py
 from subjects import load_subjects
 from preprocessing_workflow import preprocess_data
-from data_analysis import extract_roi, data_analysis
+from extract_roi import extract_roi
+from data_analysis import data_analysis
 from group_analysis_pairwise import group_analysis_pairwise
 
 ################################################################################
