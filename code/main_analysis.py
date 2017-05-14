@@ -107,7 +107,7 @@ args = parser.parse_args()
 # Path settings
 ################################################################################
 # Base path for all input and output data.
-base_path = os.path.join(os.path.sep, 'group', 'scz_dynamics')
+base_path = os.path.join(os.path.sep, 'group', 'scz_dynamics', 'ucla-la5')
 base_path_in = os.path.join(base_path, 'data_in')
 base_path_out = os.path.join(base_path, 'data_out', args.analysis_type)
 
