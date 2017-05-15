@@ -5,6 +5,7 @@ import nibabel as nib
 import time
 import json
 
+
 def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mask, region):
     """ iterate over each network and find the one with the highest probability of
     including a specific region. Once the best network is found, compute the mean bold from
@@ -127,15 +128,17 @@ def extract_roi(subjects,
 
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
-            avg = np.zeros((segmented_regions['labels'].shape[0], ntpoints))
-            for region in range(len(segmented_regions)):
-                label = segmented_regions['labels'][region]
-                boolean_mask = np.where(segmented_image_data == label)
+            for region in range(len(lookuptable['intensity'])):
+                avg = np.zeros((ntpoints, 1))
+                intensity = lookuptable['intensity'][region]
+                boolean_mask = np.where(segmented_image_data == intensity)
                 for t in range(ntpoints):
                     data = image_data[:, :, :, t]
                     data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
-                    avg[region, t] = data.mean()
-
+                    avg[t] = data.mean()
+                if extract_csf_wm:
+                    np.savetxt(os.path.join(subject_path, ''.join([lookuptable['regions'][region], '.txt'])), avg,
+                               delimiter=' ', fmt='%5e')
             # Dump the results.
             np.savetxt(os.path.join(subject_path, 'full_network.txt'),
                        avg, delimiter=' ', fmt='%5e')
@@ -148,9 +151,9 @@ def extract_roi(subjects,
             # Find the most likely regions inside the network.
             networks = {key: [] for key in range(ntw_data.shape[3])}
             ntw_filter = np.zeros(ntw_data.shape)
-            for region in range(len(segmented_regions)):
-                label = segmented_regions['labels'][region]
-                boolean_mask = segmented_image_data == label
+            for region in range(len(lookuptable)):
+                intensity = lookuptable['intensity'][region]
+                boolean_mask = segmented_image_data == intensity
                 networks, ntw_filter = most_likely_roi_network(networks,
                                                                ntw_data,
                                                                ntw_filter,
