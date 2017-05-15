@@ -25,7 +25,6 @@ def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mas
 
 
 def dump_extract_roi_json_(output_base_path, network_type, subjects, segmented_image_filename):
-    output_path = os.path.join(output_base_path, 'golden_subjects')
 
     parameters_list = {}
     timestamp = time.strftime("%Y%m%d%H%M%S")
@@ -36,15 +35,16 @@ def dump_extract_roi_json_(output_base_path, network_type, subjects, segmented_i
     parameters_list['segmentation_image'] = segmented_image_filename
 
     # Dump json file.
-    with open(os.path.join(output_path, 'extract_roi.json'), 'w') as json_file:
+    with open(os.path.join(output_base_path, 'extract_roi.json'), 'w') as json_file:
         json.dump(parameters_list, json_file, indent=4)
 
 
 def extract_roi(subjects,
                 network_type,
+                extract_csf_wm,
                 input_basepath,
-                segmented_image_filename,
-                segmented_regions_filename,
+                segmented_image,
+                segmented_regions_path,
                 output_basepath,
                 golden_subjects,
                 network_mask_filename=None):
@@ -61,8 +61,8 @@ def extract_roi(subjects,
          - input_basepath: Path to datasink
          - preprocessed_image: name of the preprocessed file that will be
                                segmented
-         - segmented_image_filename : Path to the image that will be used to segment
-         - segmented_regions: List of regions that will be used for the
+         - segmented_image : Path to the image that will be used to segment
+         - lookuptable: List of regions that will be used for the
            segmentation
          - output_basepath   : Path where the BOLD signal will be saved
          - newtork       : Define if segmented regions should be further
@@ -78,15 +78,28 @@ def extract_roi(subjects,
         raise ValueError('The %s network type requires a network mask.' %
                          (network_type))
 
-    # Load the segmented regions list.
-    segmented_regions = np.genfromtxt(segmented_regions_filename,
-                                      dtype=[('numbers', '<i8'), ('regions', 'S31'), ('labels', 'i4')],
-                                      delimiter=','
-                                      )
+    if network_type != 'full_network' and extract_csf_wm == 'csf_wm':
+        raise ValueError('CSF and white matter can only be extracted with the full network method')
+
+    if extract_csf_wm:
+        segmented_regions_filename = os.path.join(segmented_regions_path, 'csf_wm_LookupTable')
+        lookuptable = np.genfromtxt(segmented_regions_filename,
+                                    dtype=[('intensity', '<i8'), ('regions', 'S31'), ('numbers', 'S10')],
+                                    delimiter=','
+                                    )
+    else:
+        # Load the segmented regions list.
+        segmented_regions_filename = os.path.join(segmented_regions_path, 'LookupTable')
+        lookuptable = np.genfromtxt(segmented_regions_filename,
+                                    dtype=[('numbers', '<i8'), ('regions', 'S31'), ('intensity', 'i4')],
+                                    delimiter=','
+                                    )
+
 
     # Load the segmented image.
-    segmented_image = nib.load(segmented_image_filename)
-    segmented_image_data = segmented_image.get_data()
+    if not extract_csf_wm:
+        segmented_image = nib.load(segmented_image)
+        segmented_image_data = segmented_image.get_data()
 
     # Extract ROI for each subjects.
     preprocessed_image_filename = 'denoised_func_data_nonaggr_filt.nii.gz'
@@ -102,29 +115,41 @@ def extract_roi(subjects,
         logging.info('Subject ID:        %s' %(subject))
         logging.info('')
 
+        # Load image to segment. It is subject specific if the analysis is csf and wm extraction
+        # FIXME
+        # Note: This step assumes that the aseg.auto image has already been registered to standart space and converted to
+        # nifti file
+        if extract_csf_wm:
+            segmented_image_filepath = os.path.join(segmented_image, subject, 'mri', 'aseg.auto_trans.nii.gz')
+            segmented_image = nib.load(segmented_image_filepath)
+            segmented_image_data = segmented_image.get_data()
+
         # Generate the output folder.
-        if golden_subjects:
-            subject_path = os.path.join(output_basepath, 'golden_subjects', subject)
-        else:
-            subject_path = os.path.join(output_basepath, 'analysis_subjects', subject)
+        subject_path = os.path.join(output_basepath, subject)
         if not os.path.exists(subject_path):
             os.makedirs(subject_path)
 
         # Check if ROIs has been extracted in case yes, early exit
         if network_type == 'full_network' or 'between_network':
             if os.path.exists(os.path.join(subject_path, network_type + '.txt')):
+                logging.info('Time course for this subject was already extracted')
                 continue
         elif network_type == 'within_network':
             if os.path.exists(os.path.join(subject_path, network_type + '_9.txt')):
+                logging.info('Time course for this subject was already extracted')
                 continue
 
         # Load the subject input image.
-        image_filename = os.path.join(input_basepath, 'final_image', subject,
-                                      preprocessed_image_filename)
+        if extract_csf_wm:
+            image_filename = os.path.join(input_basepath, 'final_image', subject,
+                                          preprocessed_image_filename)
+        else:
+            image_filename = os.path.join(input_basepath, 'final_image', subject,
+                                          wm_csf_extracted_image_filename)
+
         image = nib.load(image_filename)
         image_data = image.get_data()
         ntpoints = image_data.shape[3]
-
 
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
@@ -168,8 +193,8 @@ def extract_roi(subjects,
                 for network in networks:
                     avg = np.zeros((len(networks[network]), ntpoints))
                     for region in range(len(networks[network])):
-                        label = segmented_regions['labels'][networks[network][region]]
-                        boolean_mask = np.where(segmented_image_data == label)
+                        intensity = lookuptable['intensity'][networks[network][region]]
+                        boolean_mask = np.where(segmented_image_data == intensity)
                         for t in range(ntpoints):
                             data = image_data[:, :, :, t]
                             data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
