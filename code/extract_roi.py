@@ -153,20 +153,29 @@ def extract_roi(subjects,
 
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
-            for region in range(len(lookuptable['intensity'])):
-                avg = np.zeros((ntpoints, 1))
+            avg = np.zeros((lookuptable['intensity'].shape[0], ntpoints))
+            for region in range(len(lookuptable)):
                 intensity = lookuptable['intensity'][region]
                 boolean_mask = np.where(segmented_image_data == intensity)
                 for t in range(ntpoints):
                     data = image_data[:, :, :, t]
                     data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
-                    avg[t] = data.mean()
-                if extract_csf_wm:
-                    np.savetxt(os.path.join(subject_path, ''.join([lookuptable['regions'][region], '.txt'])), avg,
-                               delimiter=' ', fmt='%5e')
+                    avg[region, t] = data.mean()
+
             # Dump the results.
-            np.savetxt(os.path.join(subject_path, 'full_network.txt'),
-                       avg, delimiter=' ', fmt='%5e')
+            if extract_csf_wm:
+                # Fsl GLM design matrix requires (time x regressor) and demeaned data
+                design = np.transpose(avg)
+                design_mean = np.mean(design, axis=0)
+                design -= design_mean
+                design_output_file = os.path.join(subject_path, ''.join(['wm_csf_time_course', '.txt']))
+                np.savetxt(design_output_file, design, delimiter=' ', fmt='%5e')
+            else:
+                np.savetxt(os.path.join(subject_path, 'full_network.txt'),
+                           avg, delimiter=' ', fmt='%5e')
+
+
+
         else:
             # Load the network mask.
             ntw_image = nib.load(network_mask_filename)

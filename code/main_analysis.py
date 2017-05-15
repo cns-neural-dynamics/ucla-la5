@@ -51,6 +51,11 @@ parser.add_argument(
     help='Perform pre-processing of the data.'
 )
 parser.add_argument(
+    '-w', '--extract_csf_wm', dest='extract_csf_wm',
+    action='store_true',
+    help='Perform extraction of CSF and WM'
+)
+parser.add_argument(
     '-r', '--extract_roi',
     action='store_true', dest='extract_roi',
     help='Perform ROI extraction.'
@@ -116,12 +121,15 @@ base_path_out = os.path.join(base_path, 'data_out', args.analysis_type)
 # FIXME: This has never been tested.
 preprocessing_input_basepath = os.path.join(base_path_in, 'reconall_data')
 preprocessing_output_basepath = os.path.join(base_path_out, 'preprocessing_out')
+# Input image for wm and csf extraction
+reconall_segmented_image_basepath = os.path.join(base_path_in, 'reconall_data')
+preprocessing_csf_wm_output = os.path.join(preprocessing_output_basepath, 'final_image_wm_csf_extracted')
 
 # ROI extraction
 # Input image for ROI extraction
 roi_input_segmented_image_filename = os.path.join(base_path_in, 'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
 # Input region list for ROI extraction
-roi_input_segmented_regions_filename = os.path.join(base_path_in, 'voi_extraction', 'LookupTable')
+roi_input_segmented_regions_path = os.path.join(base_path_in, 'voi_extraction')
 # Image where between_network and within_network are specified.
 roi_input_network_filename = os.path.join(base_path_in, 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
 roi_input_basepath = preprocessing_output_basepath
@@ -190,7 +198,20 @@ if args.preprocess:
     preprocess_data(subjects,
                     preprocessing_input_basepath,
                     preprocessing_output_basepath)
+
+    # extract csf and white matter
     print('Pre-processing.')
+
+if args.extract_csf_wm:
+    extract_roi(subjects,
+                args.network_type,
+                args.extract_csf_wm,
+                preprocessing_output_basepath,
+                reconall_segmented_image_basepath,
+                roi_input_segmented_regions_path,
+                preprocessing_csf_wm_output,
+                golden_subjects=False,
+                network_mask_filename=roi_input_network_filename)
 
 ############################################################################
 # ROI extraction
@@ -202,9 +223,10 @@ if args.extract_roi:
     # Extract ROIs.
     extract_roi(subjects,
                 args.network_type,
+                args.extract_csf_wm,
                 roi_input_basepath,
                 roi_input_segmented_image_filename,
-                roi_input_segmented_regions_filename,
+                roi_input_segmented_regions_path,
                 roi_output_basepath,
                 args.golden_subjects,
                 network_mask_filename=roi_input_network_filename)
