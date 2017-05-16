@@ -169,7 +169,10 @@ def extract_roi(subjects,
             avg = np.zeros((lookuptable['intensity'].shape[0], ntpoints))
             for region in range(len(lookuptable)):
                 intensity = lookuptable['intensity'][region]
-                boolean_mask = np.where(segmented_image_data == intensity)
+                # Note: Not all intensity values are integers on the csf/wm segmentaton image are int. Therefore, we use
+                # the np.isclose function to find all values that are in a similar range. This lead to the inclusion of
+                # a few regions.
+                boolean_mask = np.where(np.isclose(segmented_image_data, intensity, atol=.9))
                 for t in range(ntpoints):
                     data = image_data[:, :, :, t]
                     data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
