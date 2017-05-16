@@ -16,6 +16,7 @@ window_types = ['non-sliding', 'sliding']
 data_analysis_types = ['BOLD', 'synchrony', 'graph_analysis']
 group_analysis_types = ['hutchenson', 'ttest', '1ANOVA']
 analysis_types = ['rest', 'task']
+ica_aroma_types = ['aggr', 'nonaggr']
 
 ############################################################################
 # Argument parsing
@@ -105,6 +106,12 @@ parser.add_argument(
     dest='group_analysis_type', metavar='GROUP_ANALYSIS_TYPE',
     choices=group_analysis_types,
     help='Group analysis type. Choose from: ' + ', '.join(group_analysis_types)
+)
+parser.add_argument(
+    '--ica_aroma-type',
+    dest='ica_aroma_type', metavar='ICA_AROMA_TYPE',
+    choices=ica_aroma_types,
+    help='ICA aroma type. Chose from: ' + ', '.join(ica_aroma_types)
 )
 args = parser.parse_args()
 
@@ -210,7 +217,7 @@ if args.extract_csf_wm:
                 reconall_segmented_image_basepath,
                 roi_input_segmented_regions_path,
                 preprocessing_csf_wm_output,
-                golden_subjects=False,
+                args.ica_aroma_type,
                 network_mask_filename=roi_input_network_filename)
 
 ############################################################################
@@ -228,7 +235,7 @@ if args.extract_roi:
                 roi_input_segmented_image_filename,
                 roi_input_segmented_regions_path,
                 roi_output_basepath,
-                args.golden_subjects,
+                args.ica_aroma_type,
                 network_mask_filename=roi_input_network_filename)
 
 ############################################################################
@@ -254,6 +261,7 @@ if args.analyse_data:
                   args.network_type,
                   args.window_type,
                   args.data_analysis_type,
+                  args.ica_aroma_type,
                   args.nclusters,
                   args.rand_ind,
                   args.golden_subjects)

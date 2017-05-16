@@ -178,7 +178,7 @@ def check_number_networks(subjects, input_basepath, network_type):
 
 
 def calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type,
-                               data_analysis_type, nclusters, rand_ind, pipeline_call=True):
+                               data_analysis_type, ica_aroma_type, nclusters, rand_ind, pipeline_call=True):
     # Find number of network for dataset
     nnetwork_keys = check_number_networks(subjects, input_basepath, network_type)
 
@@ -196,16 +196,16 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
         # The actual data depends on the network type.
         hilbert_transforms = {}
         if network_type == 'between_network':
-            data_path = os.path.join(input_basepath, subject, 'between_network.txt')
+            data_path = os.path.join(input_basepath, subject, ''.join(['icaroma_', ica_aroma_type]), 'between_network.txt')
             data = np.genfromtxt(data_path)
             hilbert_transforms[0] = compute_hilbert_tranform(data)
         elif network_type == 'within_network':
             for network in range(nnetwork_keys):
-                data_path = os.path.join(input_basepath, subject, 'within_network_%d.txt' % network)
+                data_path = os.path.join(input_basepath, subject, ''.join(['icaroma_', ica_aroma_type]), 'within_network_%d.txt' % network)
                 data = np.genfromtxt(data_path)
                 hilbert_transforms[network] = compute_hilbert_tranform(data)
         elif network_type == 'full_network':
-            data_path = os.path.join(input_basepath, subject, 'full_network.txt')
+            data_path = os.path.join(input_basepath, subject, ''.join(['icaroma_', ica_aroma_type]), 'full_network.txt')
             data = np.genfromtxt(data_path)
             hilbert_transforms[0] = compute_hilbert_tranform(data)
 
@@ -406,6 +406,7 @@ def data_analysis(subjects,
                   network_type,
                   window_type,
                   data_analysis_type,
+                  ica_aroma_type,
                   nclusters,
                   rand_ind,
                   golden_subjects):
@@ -448,13 +449,14 @@ def data_analysis(subjects,
     logging.info('Window type:         %s' %(window_type))
     logging.info('Window size:         %d' %(window_size))
     logging.info('Data analysis type:  %s' %(data_analysis_type))
+    logging.info('ICA-AROMA type:      %s' %(ica_aroma_type))
     logging.info('Nclusters:           %d' %(nclusters))
     logging.info('Golden subjects      %s' %(golden_subjects))
     logging.info('Rand_ind:            %d' %(rand_ind))
     logging.info('')
 
     calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type,
-                               data_analysis_type, nclusters, rand_ind)
+                               data_analysis_type, ica_aroma_type, nclusters, rand_ind)
 
     # Calculate the optimal k from the healthy subjects only.
     # Note: This is not needed with the BOLD data analysis. The optimal k will
@@ -490,7 +492,7 @@ def data_analysis(subjects,
         # Behave differently based on data analysis type.
         if data_analysis_type == 'BOLD':
             # Apply a threshold to the data. We use the 1.3 default value.
-            data_path = os.path.join(input_basepath, subject, 'full_network.txt')
+            data_path = os.path.join(input_basepath, subject, ica_aroma_type, 'full_network.txt')
             data = np.genfromtxt(data_path)
             nregions = data.shape[0]
             thr_data = bold_plot_threshold(data, nregions, threshold=1.3)

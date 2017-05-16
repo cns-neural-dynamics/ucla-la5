@@ -7,16 +7,16 @@ import json
 import nipype.interfaces.fsl as fsl
 
 
-def nipype_nuisance_regression(input_image, subject_output_path, design_output_file):
+def nipype_nuisance_regression(input_image, subject_output_path, design_output_file, ica_aroma_type):
     """Perform Regression with nuisance regressors"""
     # FIXME: pycharm cant find the command fsl_glm
     fsl.FSLCommand.set_default_output_type('NIFTI_GZ')
-    logging.info('         Calculating GLM with Nuisance Regressors')
+    logging.info('                   Calculating GLM with Nuisance Regressors')
     glm = fsl.GLM()
     glm.inputs.in_file = input_image
     glm.inputs.design = design_output_file
-    glm.inputs.out_res_name = os.path.join(subject_output_path, 'denoised_func_data_nonaggr_filt_wm_csf_extracted.nii.gz')
-    glm.inputs.out_file = 'glm_betas.nii.gz'
+    glm.inputs.out_res_name = os.path.join(subject_output_path, 'denoised_func_data_%s_filt_wm_csf_extracted.nii.gz' %ica_aroma_type)
+    glm.inputs.out_file = os.path.join(subject_output_path, 'glm_betas.nii.gz')
     glm.run()
 
 def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mask, region):
@@ -37,7 +37,8 @@ def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mas
     return netw, net_filter
 
 
-def dump_extract_roi_json_(output_base_path, network_type, subjects, segmented_image_filename):
+def dump_extract_roi_json_(output_base_path, network_type, subjects, ica_aroma_type, segmented_image_filename):
+    output_path = os.path.join(output_base_path)
 
     parameters_list = {}
     timestamp = time.strftime("%Y%m%d%H%M%S")
@@ -45,10 +46,11 @@ def dump_extract_roi_json_(output_base_path, network_type, subjects, segmented_i
     parameters_list['timestamp'] = timestamp
     parameters_list['network_type'] = network_type
     parameters_list['subjects'] = subjects
+    parameters_list['ica_aroma_type'] = ica_aroma_type
     parameters_list['segmentation_image'] = segmented_image_filename
 
     # Dump json file.
-    with open(os.path.join(output_base_path, 'extract_roi.json'), 'w') as json_file:
+    with open(os.path.join(output_path, 'extract_roi.json'), 'w') as json_file:
         json.dump(parameters_list, json_file, indent=4)
 
 
@@ -59,7 +61,7 @@ def extract_roi(subjects,
                 segmented_image,
                 segmented_regions_path,
                 output_basepath,
-                golden_subjects,
+                ica_aroma_type,
                 network_mask_filename=None):
     """
     Iterate over all subjects and all regions (specified by the segmented_image).
@@ -111,11 +113,13 @@ def extract_roi(subjects,
 
     # Load the segmented image.
     if not extract_csf_wm:
-        segmented_image = nib.load(segmented_image)
-        segmented_image_data = segmented_image.get_data()
+        segmented_image_nib = nib.load(segmented_image)
+        segmented_image_data = segmented_image_nib.get_data()
 
     # Extract ROI for each subjects.
-    preprocessed_image_filename = 'denoised_func_data_nonaggr_filt.nii.gz'
+
+    preprocessed_image_filename = 'denoised_func_data_%s_filt.nii.gz' % ica_aroma_type
+    wm_csf_extracted_image_filename = 'denoised_func_data_%s_filt_wm_csf_extracted.nii.gz' %ica_aroma_type
 
     logging.info('--------------------------------------------------------------------')
     logging.info(' Extract ROI')
@@ -123,6 +127,8 @@ def extract_roi(subjects,
     logging.info('')
     logging.info('* PARAMETERS')
     logging.info('network type:      %s' %(network_type))
+    logging.info('ica aroma type:    %s' %(ica_aroma_type))
+    logging.info('extract CSF/WM:    %s' %(extract_csf_wm))
 
     for subject in subjects:
         logging.info('Subject ID:        %s' %(subject))
@@ -133,12 +139,12 @@ def extract_roi(subjects,
         # Note: This step assumes that the aseg.auto image has already been registered to standart space and converted to
         # nifti file
         if extract_csf_wm:
-            segmented_image_filepath = os.path.join(segmented_image, subject, 'mri', 'aseg.auto_trans.nii.gz')
-            segmented_image = nib.load(segmented_image_filepath)
-            segmented_image_data = segmented_image.get_data()
+            segmented_image_filepath = os.path.join(input_basepath, 'warp_complete', 'warpaseg', subject, 'aseg.auto_trans_out.nii.gz')
+            segmented_image_nib = nib.load(segmented_image_filepath)
+            segmented_image_data = segmented_image_nib.get_data()
 
         # Generate the output folder.
-        subject_path = os.path.join(output_basepath, subject)
+        subject_path = os.path.join(output_basepath, subject,''.join(['icaroma_', ica_aroma_type]))
         if not os.path.exists(subject_path):
             os.makedirs(subject_path)
 
@@ -154,10 +160,10 @@ def extract_roi(subjects,
 
         # Load the subject input image.
         if extract_csf_wm:
-            image_filename = os.path.join(input_basepath, 'final_image', subject,
+            image_filename = os.path.join(input_basepath, 'final_image', subject, ''.join(['icaroma_', ica_aroma_type]),
                                           preprocessed_image_filename)
         else:
-            image_filename = os.path.join(input_basepath, 'final_image_wm_csf_extracted', subject,
+            image_filename = os.path.join(input_basepath, 'final_image_wm_csf_extracted', subject, ''.join(['icaroma_', ica_aroma_type]),
                                           wm_csf_extracted_image_filename)
 
         image = nib.load(image_filename)
@@ -193,7 +199,7 @@ def extract_roi(subjects,
 
             # perform GLM with WM and CSF ans nuisance regressors
             if extract_csf_wm:
-                nipype_nuisance_regression(image_filename, subject_path, design_output_file)
+                nipype_nuisance_regression(image_filename, subject_path, design_output_file, ica_aroma_type)
 
         else:
             # Load the network mask.
@@ -249,5 +255,5 @@ def extract_roi(subjects,
                 raise ValueError('Unrecognised network type: %s.' % (network_type))
 
     # Dump json with parameters of the roi extraction.
-    dump_extract_roi_json_(output_basepath, network_type, subjects, segmented_image_filename)
+    dump_extract_roi_json_(output_basepath, network_type, subjects, ica_aroma_type, segmented_image)
 
