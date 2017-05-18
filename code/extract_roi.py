@@ -15,6 +15,7 @@ def nipype_nuisance_regression(input_image, subject_output_path, design_output_f
     glm = fsl.GLM()
     glm.inputs.in_file = input_image
     glm.inputs.design = design_output_file
+    glm.inputs.demean = True
     glm.inputs.out_res_name = os.path.join(subject_output_path, 'denoised_func_data_%s_filt_wm_csf_extracted.nii.gz' %ica_aroma_type)
     glm.inputs.out_file = os.path.join(subject_output_path, 'glm_betas.nii.gz')
     glm.run()
@@ -149,14 +150,15 @@ def extract_roi(subjects,
             os.makedirs(subject_path)
 
         # Check if ROIs has been extracted in case yes, early exit
-        if network_type == 'full_network' or 'between_network':
-            if os.path.exists(os.path.join(subject_path, network_type + '.txt')):
-                logging.info('Time course for this subject was already extracted')
-                continue
-        elif network_type == 'within_network':
-            if os.path.exists(os.path.join(subject_path, network_type + '_9.txt')):
-                logging.info('Time course for this subject was already extracted')
-                continue
+        if not extract_csf_wm:
+            if network_type == 'full_network' or 'between_network':
+                if os.path.exists(os.path.join(subject_path, network_type + '.txt')):
+                    logging.info('Time course for this subject was already extracted')
+                    continue
+            elif network_type == 'within_network':
+                if os.path.exists(os.path.join(subject_path, network_type + '_9.txt')):
+                    logging.info('Time course for this subject was already extracted')
+                    continue
 
         # Load the subject input image.
         if extract_csf_wm:
@@ -173,23 +175,31 @@ def extract_roi(subjects,
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
             avg = np.zeros((lookuptable['intensity'].shape[0], ntpoints))
+            mask = np.zeros((image.shape[0], image.shape[1], image.shape[2]))
+
             for region in range(len(lookuptable)):
                 intensity = lookuptable['intensity'][region]
                 # Note: Not all intensity values are integers on the csf/wm segmentaton image are int. Therefore, we use
                 # the np.isclose function to find all values that are in a similar range. This lead to the inclusion of
                 # a few regions.
-                boolean_mask = np.where(np.isclose(segmented_image_data, intensity, atol=.9))
+                boolean_region = np.isclose(segmented_image_data, intensity, atol=.0)
+                boolean_mask = np.where(boolean_region)
+                mask[boolean_region] = 1
                 for t in range(ntpoints):
                     data = image_data[:, :, :, t]
                     data = data[boolean_mask[0], boolean_mask[1], boolean_mask[2]]
                     avg[region, t] = data.mean()
 
+            affine = image.affine
+            mask_img = nib.Nifti1Image(mask, affine)
+            nib.save(mask_img, os.path.join(subject_path, ''.join('mask.nii.gz')))
+
             # Dump the results.
             if extract_csf_wm:
                 # Fsl GLM design matrix requires (time x regressor) and demeaned data
                 design = np.transpose(avg)
-                design_mean = np.mean(design, axis=0)
-                design -= design_mean
+                # design_mean = np.mean(design, axis=0)
+                # design -= design_mean
                 design_output_file = os.path.join(subject_path, ''.join(['wm_csf_time_course', '.txt']))
                 np.savetxt(design_output_file, design, delimiter=' ', fmt='%5e')
             else:
