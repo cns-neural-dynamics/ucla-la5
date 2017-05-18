@@ -1,3 +1,4 @@
+
 import os
 from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth, BET
 from nipype.interfaces.freesurfer import BBRegister, MRIConvert
@@ -7,12 +8,11 @@ from nipype.interfaces.utility import Merge
 from nipype.pipeline.engine import Workflow, Node, MapNode
 from nipype.interfaces.io import DataSink, FreeSurferSource, DataGrabber
 from nipype.interfaces.utility import IdentityInterface, Function
-
+from argparse import ArgumentParser
 
 from nipypext import nipype_wrapper
 
 
-# FIXME: mriconvert and ants_reg not working on new cluster
 def get_file(in_file):
     """
     ApplyTransforms ouptu is a list. This function gets the path to warped file
@@ -32,11 +32,11 @@ def get_VOIs(preprocessed_image, segmented_image_path, segmented_regions_path,
     import nibabel as nib
 
     # Load segmented image and obtain data from the image
-    segmented_image =  nib.load(segmented_image_path)
+    segmented_image = nib.load(segmented_image_path)
     segmented_image_data = segmented_image.get_data()
     # Load the Lookup Table which assigns each region to one specific pixel
     # intensity
-    segmented_regions = np.genfromtxt(segmented_regions_path, dtype = [('numbers',
+    segmented_regions = np.genfromtxt(segmented_regions_path, dtype=[('numbers',
                                                                         '<i8'), ('regions', 'S31'), ('labels', 'i4')], delimiter=',')
 
     # Load subjects preprocessed image and extract data from the image
@@ -63,10 +63,15 @@ def get_VOIs(preprocessed_image, segmented_image_path, segmented_regions_path,
     return os.path.abspath(file_name)
 
 
-def preprocess_data(subjects,
-                    preprocessing_input_basepath,
-                    preprocessing_output_basepath):
+def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
+    '''
+    The second argument specify the type of preprocessing
+    '''
+    # Note: Subjects need to be passed as a list
+    subjects_list = [subject]
 
+    if preprocessing_type == None:
+        raise ValueError('Pass type of image you want to be preprocessessed')
     #------------------------------------------------------------------------------
     #                              Specify Variabless
     #------------------------------------------------------------------------------
@@ -75,24 +80,36 @@ def preprocess_data(subjects,
     # location of template file
     template = Info.standard_image('MNI152_T1_2mm.nii.gz')
 
+    # Data Location
+    data_in_dir = os.path.join(base_path, 'data_in', 'reconall_data')
+    data_out_dir = os.path.join(base_path, 'data_out', preprocessing_type)
+
     # Get functional image
     datasource = Node(interface=DataGrabber(infields=['subject_id'],
-            outfields=['epi', 't1']), name='datasource')
-    datasource.inputs.base_directory = preprocessing_input_basepath
+            outfields=['epi', 't1', 'aseg_auto']), name='datasource')
+    datasource.inputs.base_directory = data_in_dir
     datasource.inputs.template = '*'
     datasource.inputs.sort_filelist = True
-    datasource.inputs.field_template = dict(epi=os.path.join('%s', 'func', '%s_task-stopsignal_bold.nii.gz'),
-                                            t1=os.path.join('%s', 'anat', '%s_T1w.nii.gz' ))
+    if preprocessing_type == 'rest':
+        datasource.inputs.field_template = dict(epi=os.path.join('%s', 'func', '%s_task-rest_bold.nii.gz'),
+                                                t1=os.path.join('%s', 'anat', '%s_T1w.nii.gz'),
+                                                aseg_auto=os.path.join('%s', 'mri', 'aseg.auto.mgz'))
+    elif preprocessing_type == 'task':
+        datasource.inputs.field_template = dict(epi=os.path.join('%s', 'func', '%s_task-stopsignal_bold.nii.gz'),
+                                                t1=os.path.join('%s', 'anat', '%s_T1w.nii.gz'),
+                                                aseg_auto=os.path.join('%s', 'mri', 'aseg.auto.mgz'))
+    # this specifies the variables for the field_templates
     datasource.inputs.template_args = dict(epi=[['subject_id', 'subject_id']],
-                                           t1=[['subject_id', 'subject_id']])
-    datasource.inputs.subject_id = subjects
+                                           t1=[['subject_id', 'subject_id']],
+                                           aseg_auto=[['subject_id']])
+    datasource.inputs.subject_id = subjects_list
     #------------------------------------------------------------------------------
     # Use data grabber specific for FreeSurfer data
     fslsource = Node(FreeSurferSource(), name='getFslData')
-    fslsource.inputs.subjects_dir = preprocessing_input_basepath
+    fslsource.inputs.subjects_dir = data_in_dir
 
     # Generate mean image - only for the EPI image
-    mean_image = Node(MeanImage(), name = 'Mean_Image')
+    mean_image = Node(MeanImage(), name='Mean_Image')
     # mean_image.inputs.out_file = 'MeanImage.nii.gz'
 
     # motion correction
@@ -145,7 +162,7 @@ def preprocess_data(subjects,
     bbreg.inputs.init = 'fsl'
     bbreg.inputs.contrast_type = 't2'
     bbreg.inputs.out_fsl_file = True
-    bbreg.inputs.subjects_dir = preprocessing_input_basepath
+    bbreg.inputs.subjects_dir = data_in_dir
 
     # convert BBRegister transformation to ANTS ITK format. Necessary to convert
     # fsl.style affine registration into ANTS itk format
@@ -176,27 +193,44 @@ def preprocess_data(subjects,
     warpall.inputs.terminal_output = 'file' # writes output to file
     warpall.inputs.invert_transform_flags = [False, False]
 
+    warpaseg = MapNode(ApplyTransforms(), name='warpaseg', iterfield=['input_image'])
+    warpaseg.inputs.args = '--float'
+    warpaseg.inputs.reference_image = template
+    warpaseg.inputs.input_image_type = 3
+    warpaseg.inputs.interpolation = 'Linear'
+    warpaseg.inputs.num_threads = 1
+    warpaseg.inputs.terminal_output = 'file' # writes output to file
+
+    warpasegnii = Node(MRIConvert(), name='warpaseg_mgz2nii')
+    warpasegnii.inputs.out_type = 'niigz'
+
     # get path from warp file
     warpall2file = Node(name='warpmean2file', interface=Function(input_names=['in_file'],
         output_names=['out_file'], function=get_file))
     warpmean2file = Node(name='warpall2file', interface=Function(input_names=['in_file'],
+        output_names=['out_file'], function=get_file))
+    warpaseg2file = Node(name='warpaseg2file', interface=Function(input_names=['in_file'],
         output_names=['out_file'], function=get_file))
 
     # Perform ICA to find components related to motion (implemented on ICA-Aroma)
     # inputs for the ICA-aroma function
     ica_aroma = Node(name='ICA_aroma',
                      interface=Function(input_names=['inFile', 'outDir',
-                     'mc', 'subject_id', 'mask'],
+                     'mc', 'subject_id', 'mask', 'denType'],
                                         output_names=['output_file'],
                                         function=nipype_wrapper.get_ica_aroma))
-    outDir = os.path.join(preprocessing_output_basepath,'preprocessing_out', 'ica_aroma')
+    outDir = os.path.join(data_out_dir,'preprocessing_out', 'ica_aroma')
+    ica_aroma.iterables = ('denType', ['aggr', 'nonaggr'])
     ica_aroma.inputs.outDir = outDir
 
+    # Generate mean image of ICA-AROMA output
+    mean_ica = Node(MeanImage(), name='Mean_Image')
+
     # spatial filtering
-    iso_smooth_all = Node(IsotropicSmooth(), name = 'SpatialFilterAll')
+    iso_smooth_all = Node(IsotropicSmooth(), name='SpatialFilterAll')
     iso_smooth_all.inputs.fwhm = 5
     # spatial filtering
-    iso_smooth_mean = Node(IsotropicSmooth(), name = 'SpatialFilterMean')
+    iso_smooth_mean = Node(IsotropicSmooth(), name='SpatialFilterMean')
     iso_smooth_mean.inputs.fwhm = 5
 
     # temporal filtering
@@ -228,21 +262,25 @@ def preprocess_data(subjects,
     # ------------------------------
     # Define Infosource, which is the input Node. Information from subject_id are
     # obtained from this Node
-    infosource = Node(interface=IdentityInterface(fields = ['subject_id']), name = 'InfoSource')
-    infosource.iterables = ('subject_id', subjects)
+    infosource = Node(interface=IdentityInterface(fields=['subject_id']), name='InfoSource')
+    infosource.iterables = ('subject_id', subjects_list)
 
     # Define DataSink, where all data will be saved
-    data_sink = Node(DataSink(), name = 'DataSink')
-    data_sink.inputs.base_directory = os.path.join(preprocessing_output_basepath, 'preprocessing_out')
+    data_sink = Node(DataSink(), name='DataSink')
+    data_sink.inputs.base_directory = os.path.join(data_out_dir, 'preprocessing_out')
     # data_sink.inputs.container = '{subject_id}'
     substitutions = [('_subject_id_', ''),
                      ('_fwhm', 'fwhm'),
-                     ('_warpmean', 'warpmean')]
+                     ('_warpmean0', 'warpmean'),
+                     ('_warpall0', 'warpall'),
+                     ('_warpaseg0', 'warpaseg'),
+                     ('_denType_aggr', 'icaroma_aggr'),
+                     ('_denType_nonaggr', 'icaroma_nonaggr')]
     data_sink.inputs.substitutions = substitutions
 
     # Define workflow name and where output will be saved
-    preproc = Workflow(name = 'preprocessing')
-    preproc.base_dir = preprocessing_output_basepath
+    preproc = Workflow(name='preprocessing')
+    preproc.base_dir = data_out_dir
 
     # Define connection between nodes
     preproc.connect([
@@ -284,10 +322,19 @@ def preprocess_data(subjects,
            (datasource,          warpall,         [('epi'            , 'input_image'  )] ),
            (merge,               warpall,         [('out'            , 'transforms'   )] ),
            (warpall,             data_sink,       [('output_image'   ,
-                                                              'warp_complete.warpall' )] ),
+                                                              'warp_complete.warpall.@' )] ),
            # need to convert list of path given by warp all into path
            (warpall,             warpall2file,    [('output_image'   , 'in_file'      )] ),
            (warpmean,            warpmean2file,  [('output_image'   , 'in_file'      )] ),
+           # register aseg.auto image with WM and CSF segmentation
+           (datasource,          warpaseg,        [('aseg_auto'     , 'input_image'       )]),
+           (antsreg,             warpaseg,        [('composite_transform', 'transforms'    )]),
+           (warpaseg,            data_sink,       [('output_image'   ,
+                                                              'warp_complete.warpaseg.@')]),
+           (warpaseg,            warpaseg2file,   [('output_image'   ,  'in_file'     )]),
+           (warpaseg2file,       warpasegnii,     [('out_file'       ,  'in_file'     )]),
+           (warpasegnii,         data_sink,       [('out_file'       ,
+                                                             'warp_complete.warpaseg.@nii')]),
            # skull strip EPI for ICA-AROMA
            (warpall2file,        bet,             [('out_file'   , 'in_file'       )] ),
            (bet,                 data_sink,       [('mask_file'      , 'bet.mask'     )] ),
@@ -301,10 +348,12 @@ def preprocess_data(subjects,
                                                                   'spatial_filter.all')] ),
            # ICA-AROMA
            # run ICA using normalised image
-           (iso_smooth_all,     ica_aroma,       [('out_file'         , 'inFile'        )] ),
+           (iso_smooth_all,      ica_aroma,       [('out_file'      , 'inFile'        )] ),
            (infosource,          ica_aroma,      [('subject_id'     , 'subject_id'     )] ),
            (mot_par,             ica_aroma,      [('par_file'       , 'mc'             )] ),
            (bet,                 ica_aroma,      [('mask_file'      , 'mask'           )] ),
+           # ICA-AROMA mean image
+           # (ica_aroma,           mean_ica,        [('output_file'   , 'in_file'        )] ),
            # Apply temporal filtering
            (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
            (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
@@ -315,8 +364,31 @@ def preprocess_data(subjects,
            ])
 
     # save graph of the workflow into the workflow_graph folder
-    preproc.write_graph(os.path.join(preprocessing_output_basepath, 'preprocessing_out', 'workflow_graph',
+    preproc.write_graph(os.path.join(data_out_dir, 'preprocessing_out', 'workflow_graph',
         'workflow_graph.dot'))
     preproc.run()
     # preproc.run(plugin = 'SGEGraph', plugin_args = '-q short.q')
     # preproc.run('MultiProc', plugin_args={'n_procs': 8})
+
+if __name__ == '__main__':
+
+    parser = ArgumentParser(
+            description='Call preprocessing pipeline for each subject'
+            )
+    parser.add_argument(
+            '-s', '--subID',
+            dest='subject',
+            help='Subject ID'
+            )
+    parser.add_argument(
+            '-t', '--analysis-type', dest='preprocessing_type',
+            help='Type of analysis to be performed'
+            )
+    parser.add_argument(
+            '-p' '--base-path', dest='base_path',
+            help='Data base path'
+            )
+
+    args = parser.parse_args()
+    # Call preproecessing function
+    preprocessing_pipeline(args.subject, args.base_path, args.preprocessing_type)
