@@ -1,6 +1,6 @@
 
 import os
-from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth, BET
+from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth, BET, GLM, BinaryMaths
 from nipype.interfaces.freesurfer import BBRegister, MRIConvert
 from nipype.interfaces.ants import Registration, ApplyTransforms
 from nipype.interfaces.c3 import C3dAffineTool
@@ -11,7 +11,7 @@ from nipype.interfaces.utility import IdentityInterface, Function
 from argparse import ArgumentParser
 
 from nipypext import nipype_wrapper
-
+from extract_roi import extract_roi
 
 def get_file(in_file):
     """
@@ -62,6 +62,14 @@ def get_VOIs(preprocessed_image, segmented_image_path, segmented_regions_path,
     np.savetxt(file_name, avg, delimiter=' ', fmt='%5e')
     return os.path.abspath(file_name)
 
+def get_lookuptable(segmented_regions_file):
+    import numpy as np
+    lookuptable = np.genfromtxt(segmented_regions_file,
+                                names='intensity, regions, numbers',
+                                dtype=None,
+                                delimiter=','
+                                )
+    return lookuptable
 
 def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     '''
@@ -81,6 +89,7 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     template = Info.standard_image('MNI152_T1_2mm.nii.gz')
 
     # Data Location
+    voi_in_dir = os.path.join(base_path, 'data_in', 'voi_extraction')
     data_in_dir = os.path.join(base_path, 'data_in', 'reconall_data')
     data_out_dir = os.path.join(base_path, 'data_out', preprocessing_type)
 
@@ -217,14 +226,34 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     ica_aroma = Node(name='ICA_aroma',
                      interface=Function(input_names=['inFile', 'outDir',
                      'mc', 'subject_id', 'mask', 'denType'],
-                                        output_names=['output_file'],
+                                        output_names=['output_file', 'denType'],
                                         function=nipype_wrapper.get_ica_aroma))
-    outDir = os.path.join(data_out_dir,'preprocessing_out', 'ica_aroma')
+    ica_aroma.inputs.outDir = os.path.join(data_out_dir, 'preprocessing_out', 'ica_aroma')
     ica_aroma.iterables = ('denType', ['aggr', 'nonaggr'])
-    ica_aroma.inputs.outDir = outDir
 
     # Generate mean image of ICA-AROMA output
-    mean_ica = Node(MeanImage(), name='Mean_Image')
+    mean_ica = Node(MeanImage(), name='Mean_Image_ICA')
+
+    # Extract the desing matrix
+    glm_design = Node(name='GLM_Design_Matrix',
+                      interface=Function(input_names=['subjects', 'network_type', 'extract_csf_wm',
+                                                      'input_basepath', 'input_file', 'segmented_image', 'lookuptable',
+                                                      'output_basepath', 'ica_aroma_type', 'network_mask_filename'],
+                                         output_names=['design_matrix'],
+                                         function=extract_roi))
+    glm_design.inputs.network_type = 'full_network'
+    glm_design.inputs.extract_csf_wm = True
+    glm_design.inputs.network_mask_filename = None
+    glm_design.inputs.input_basepath = os.path.join(data_out_dir, 'preprocessing_out')
+    segmented_region_path = os.path.join(voi_in_dir, 'csf_wm_LookupTable')
+    #FIXME: rename this input
+    glm_design.inputs.lookuptable = get_lookuptable(segmented_region_path)
+    glm_design.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'final_image_wm_csf')
+
+    glm = Node(GLM(), name='GLM_Nuissance')
+    glm.inputs.demean = True
+    glm.inputs.out_res_name = 'denoised_func_data_filt_wm_csf_extracted.nii.gz'
+    glm.inputs.out_file = 'glm_betas.nii.gz'
 
     # spatial filtering
     iso_smooth_all = Node(IsotropicSmooth(), name='SpatialFilterAll')
@@ -240,20 +269,10 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     temp_filt = Node(TemporalFilter(), name='TemporalFilter')
     temp_filt.inputs.highpass_sigma = 25
 
-    # # Extract VOIs
-    # #----------------
-    # extract_vois = Node(name='extract_VOIs',
-    #                          interface = Function(input_names  =
-    #                                                             ['preprocessed_image',
-    #                                                               'segmented_image_path',
-    #                                                               'segmented_regions_path',
-    #                                                               'subject_id'],
-    #                                               output_names = ['output_file'],
-    #                                               function     = get_VOIs))
-    # extract_vois.inputs.segmented_image_path = os.path.join(base_path, 'data_in',
-    #         'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
-    # extract_vois.inputs.segmented_regions_path = os.path.join(base_path, 'data_in', 'voi_extraction',
-    #         'LookupTable')
+    final_mean = Node(BinaryMaths(), name='AddMean')
+    final_mean.inputs.operation = 'add'
+    final_mean.inputs.terminal_output = 'file'
+
     #------------------------------------------------------------------------------
     #                             Set up Workflow
     #------------------------------------------------------------------------------
@@ -353,15 +372,22 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
            (mot_par,             ica_aroma,      [('par_file'       , 'mc'             )] ),
            (bet,                 ica_aroma,      [('mask_file'      , 'mask'           )] ),
            # ICA-AROMA mean image
-           # (ica_aroma,           mean_ica,        [('output_file'   , 'in_file'        )] ),
+           (ica_aroma,           mean_ica,        [('output_file'   , 'in_file'        )] ),
+           # Extract CSF + WM
+           (infosource,          glm_design,      [('subject_id'    , 'subjects'     )] ),
+           (warpasegnii,         glm_design,      [('out_file'      , 'segmented_image')] ),
+           (ica_aroma,           glm_design,      [('output_file'   , 'input_file'     )] ),
+           (ica_aroma,           glm_design,      [('denType'       , 'ica_aroma_type' )] ),
+           (ica_aroma,           glm,             [('output_file'   , 'in_file'        )] ),
+           (glm_design,          glm,             [('design_matrix'   ,  'design'        )] ),
            # Apply temporal filtering
-           (ica_aroma,           temp_filt,      [('output_file'    , 'in_file'       )] ),
-           (temp_filt,           data_sink,      [('out_file'       , 'final_image'   )] ),
-           # (temp_filt,           extract_vois,   [('out_file'       ,
-           #                                                        'preprocessed_image')] ),
-           # (infosource,          extract_vois,   [('subject_id'     , 'subject_id'    )] ),
-           # (extract_vois,        data_sink,      [('output_file'    ,   'extract_vois')] ),
-           ])
+           (glm,                 temp_filt,      [('out_res'        , 'in_file'       )] ),
+           (temp_filt,           data_sink,      [('out_file'       , 'temp_filt'     )] ),
+           # Add mean to the dataset
+           (temp_filt,           final_mean,     [('out_file'       , 'in_file'       )] ),
+           (mean_ica,            final_mean,     [('out_file'       , 'operand_file'  )] ),
+           (final_mean,          data_sink,      [('out_file'       , 'final_image'   )] ),
+    ])
 
     # save graph of the workflow into the workflow_graph folder
     preproc.write_graph(os.path.join(data_out_dir, 'preprocessing_out', 'workflow_graph',
@@ -388,6 +414,11 @@ if __name__ == '__main__':
             '-p' '--base-path', dest='base_path',
             help='Data base path'
             )
+    parser.add_argument(
+            '-w', '--extract_csf_wm', dest='extract_csf_wm',
+            action='store_true',
+            help='Perform extraction of CSF and WM'
+    )
 
     args = parser.parse_args()
     # Call preproecessing function
