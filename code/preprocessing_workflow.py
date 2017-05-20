@@ -303,90 +303,93 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
 
     # Define connection between nodes
     preproc.connect([
-           # iterate over epi and t1 files
-           (infosource,          fslsource,      [('subject_id'     , 'subject_id'    )] ),
-           (infosource,          datasource,     [('subject_id'     , 'subject_id'    )] ),
-           # get motion parameters
-           (datasource,          mot_par,        [('epi'            , 'in_file'       )] ),
-           (mot_par,             data_sink,      [('par_file'       ,
-                                                                   'mcflirt.par_file')] ),
-           # get mean image (functional data)
-           (mot_par,             mean_image,     [('out_file'       , 'in_file'       )] ),
-           # Co-register T1 and functional image
-           (fslsource,           mgz2nii,        [('T1'             , 'in_file'       )] ),
-           (mgz2nii,             convert2itk,    [('out_file'       , 'reference_file')] ),
-           (mean_image,          convert2itk,    [('out_file'       , 'source_file'   )] ),
-           (infosource,          bbreg,          [('subject_id'     , 'subject_id'    )] ),
-           (mean_image,          bbreg,          [('out_file'       , 'source_file'   )] ),
-           (bbreg,               convert2itk,    [('out_fsl_file'   , 'transform_file')] ),
-           # Normalise T1 to MNI
-           (datasource,          antsreg,        [('t1'             , 'moving_image'  )] ),
-           # concatenate affine and ants transforms into a list
-           (antsreg,             merge,          [('composite_transform', 'in1'       )] ),
-           (convert2itk,         merge,          [('itk_transform'  , 'in2'           )] ),
-           (antsreg,             data_sink,      [('warped_image'   ,
-                                                                'antsreg.warped_image'),
-                                                  ('inverse_warped_image',
-                                                        'antsreg.inverse_warped_image'),
-                                                  ('composite_transform',
-                                                                  'antsreg.transform' ),
-                                                  ('inverse_composite_transform',
-                                                          'antsreg.inverse_transform' )] ),
-           # Use T1 transfomration to register mean functional image to MNI space
-           (mean_image,          warpmean,        [('out_file'       , 'input_image'  )] ),
-           (merge,               warpmean,         [('out'            , 'transforms'   )] ),
-           (warpmean,             data_sink,      [('output_image'   ,
-                                                              'warp_complete.warpmean')] ),
-           # Use T1 transformation to register the functional image to MNI space
-           (datasource,          warpall,         [('epi'            , 'input_image'  )] ),
-           (merge,               warpall,         [('out'            , 'transforms'   )] ),
-           (warpall,             data_sink,       [('output_image'   ,
-                                                              'warp_complete.warpall.@' )] ),
-           # need to convert list of path given by warp all into path
-           (warpall,             warpall2file,    [('output_image'   , 'in_file'      )] ),
-           (warpmean,            warpmean2file,  [('output_image'   , 'in_file'      )] ),
-           # register aseg.auto image with WM and CSF segmentation
-           (datasource,          warpaseg,        [('aseg_auto'     , 'input_image'       )]),
-           (antsreg,             warpaseg,        [('composite_transform', 'transforms'    )]),
-           (warpaseg,            data_sink,       [('output_image'   ,
-                                                              'warp_complete.warpaseg.@')]),
-           (warpaseg,            warpaseg2file,   [('output_image'   ,  'in_file'     )]),
-           (warpaseg2file,       warpasegnii,     [('out_file'       ,  'in_file'     )]),
-           (warpasegnii,         data_sink,       [('out_file'       ,
-                                                             'warp_complete.warpaseg.@nii')]),
-           # skull strip EPI for ICA-AROMA
-           (warpall2file,        bet,             [('out_file'   , 'in_file'       )] ),
-           (bet,                 data_sink,       [('mask_file'      , 'bet.mask'     )] ),
-           # do spatial filtering (mean functional data)
-           (warpmean2file,        iso_smooth_mean,[('out_file'       , 'in_file'      )] ),
-           (iso_smooth_mean,      data_sink,      [('out_file'       ,
-                                                                 'spatial_filter.mean')] ),
-           # do spatial filtering (functional data)
-           (warpall2file,        iso_smooth_all,  [('out_file'       , 'in_file'      )] ),
-           (iso_smooth_all,      data_sink,       [('out_file'       ,
-                                                                  'spatial_filter.all')] ),
-           # ICA-AROMA
-           # run ICA using normalised image
-           (iso_smooth_all,      ica_aroma,       [('out_file'      , 'inFile'        )] ),
-           (infosource,          ica_aroma,      [('subject_id'     , 'subject_id'     )] ),
-           (mot_par,             ica_aroma,      [('par_file'       , 'mc'             )] ),
-           (bet,                 ica_aroma,      [('mask_file'      , 'mask'           )] ),
-           # ICA-AROMA mean image
-           (ica_aroma,           mean_ica,        [('output_file'   , 'in_file'        )] ),
-           # Extract CSF + WM
-           (infosource,          glm_design,      [('subject_id'    , 'subjects'     )] ),
-           (warpasegnii,         glm_design,      [('out_file'      , 'segmented_image')] ),
-           (ica_aroma,           glm_design,      [('output_file'   , 'input_file'     )] ),
-           (ica_aroma,           glm_design,      [('denType'       , 'ica_aroma_type' )] ),
-           (ica_aroma,           glm,             [('output_file'   , 'in_file'        )] ),
-           (glm_design,          glm,             [('design_matrix'   ,  'design'        )] ),
-           # Apply temporal filtering
-           (glm,                 temp_filt,      [('out_res'        , 'in_file'       )] ),
-           (temp_filt,           data_sink,      [('out_file'       , 'temp_filt'     )] ),
-           # Add mean to the dataset
-           (temp_filt,           final_mean,     [('out_file'       , 'in_file'       )] ),
-           (mean_ica,            final_mean,     [('out_file'       , 'operand_file'  )] ),
-           (final_mean,          data_sink,      [('out_file'       , 'final_image'   )] ),
+        # iterate over epi and t1 files
+        (infosource,          fslsource,      [('subject_id'     , 'subject_id'    )] ),
+        (infosource,          datasource,     [('subject_id'     , 'subject_id'    )] ),
+        # get motion parameters
+        (datasource,          mot_par,        [('epi'            , 'in_file'       )] ),
+        (mot_par,             data_sink,      [('par_file'       ,
+                                                                 'mcflirt.par_file')] ),
+        # get mean image (functional data)
+        (mot_par,             mean_image,     [('out_file'       , 'in_file'       )] ),
+        # Co-register T1 and functional image
+        (fslsource,           mgz2nii,        [('T1'             , 'in_file'       )] ),
+        (mgz2nii,             convert2itk,    [('out_file'       , 'reference_file')] ),
+        (mean_image,          convert2itk,    [('out_file'       , 'source_file'   )] ),
+        (infosource,          bbreg,          [('subject_id'     , 'subject_id'    )] ),
+        (mean_image,          bbreg,          [('out_file'       , 'source_file'   )] ),
+        (bbreg,               convert2itk,    [('out_fsl_file'   , 'transform_file')] ),
+        # Normalise T1 to MNI
+        (datasource,          antsreg,        [('t1'             , 'moving_image'  )] ),
+        # concatenate affine and ants transforms into a list
+        (antsreg,             merge,          [('composite_transform', 'in1'       )] ),
+        (convert2itk,         merge,          [('itk_transform'  , 'in2'           )] ),
+        (antsreg,             data_sink,      [('warped_image'   ,
+                                                            'antsreg.warped_image'),
+                                              ('inverse_warped_image',
+                                                    'antsreg.inverse_warped_image'),
+                                              ('composite_transform',
+                                                              'antsreg.transform' ),
+                                              ('inverse_composite_transform',
+                                                      'antsreg.inverse_transform'  )] ),
+        # Use T1 transfomration to register mean functional image to MNI space
+        (mean_image,          warpmean,        [('out_file'       , 'input_image'  )] ),
+        (merge,               warpmean,         [('out'           , 'transforms'   )] ),
+        (warpmean,             data_sink,      [('output_image'   ,
+                                                          'warp_complete.warpmean' )] ),
+        # Use T1 transformation to register the functional image to MNI space
+        (datasource,          warpall,         [('epi'            , 'input_image'  )] ),
+        (merge,               warpall,         [('out'            , 'transforms'   )] ),
+        (warpall,             data_sink,       [('output_image'   ,
+                                                          'warp_complete.warpall.@')] ),
+        # need to convert list of path given by warp all into path
+        (warpall,             warpall2file,    [('output_image'   , 'in_file'      )] ),
+        (warpmean,            warpmean2file,  [('output_image'    , 'in_file'      )] ),
+        # register aseg.auto image with WM and CSF segmentation
+        (datasource,          warpaseg,        [('aseg_auto'      , 'input_image'  )] ),
+        (antsreg,             warpaseg,        [('composite_transform',
+                                                                     'transforms'  )] ),
+        (warpaseg,            data_sink,       [('output_image'   ,
+                                                         'warp_complete.warpaseg.@')] ),
+        (warpaseg,            warpaseg2file,   [('output_image'   ,  'in_file'     )] ),
+        (warpaseg2file,       warpasegnii,     [('out_file'       ,  'in_file'     )] ),
+        (warpasegnii,         data_sink,       [('out_file'       ,
+                                                         'warp_complete.warpaseg.@nii')]),
+        # skull strip EPI for ICA-AROMA
+        (warpall2file,        bet,             [('out_file'       , 'in_file'      )] ),
+        (bet,                 data_sink,       [('mask_file'      , 'bet.mask'     )] ),
+        # do spatial filtering (mean functional data)
+        (warpmean2file,        iso_smooth_mean,[('out_file'       , 'in_file'      )] ),
+        (iso_smooth_mean,      data_sink,      [('out_file'       ,
+                                                             'spatial_filter.mean' )] ),
+        # do spatial filtering (functional data)
+        (warpall2file,        iso_smooth_all,  [('out_file'       , 'in_file'      )] ),
+        (iso_smooth_all,      data_sink,       [('out_file'       ,
+                                                              'spatial_filter.all' )] ),
+        # ICA-AROMA
+        # run ICA using normalised image
+        (iso_smooth_all,      ica_aroma,      [('out_file'        , 'inFile'       )] ),
+        (infosource,          ica_aroma,      [('subject_id'      , 'subject_id'   )] ),
+        (mot_par,             ica_aroma,      [('par_file'        , 'mc'           )] ),
+        (bet,                 ica_aroma,      [('mask_file'       , 'mask'         )] ),
+        # ICA-AROMA mean image
+        (ica_aroma,           mean_ica,        [('output_file'    , 'in_file'      )] ),
+        # Extract CSF + WM
+        (infosource,          glm_design,      [('subject_id'     , 'subjects'     )] ),
+        (warpasegnii,         glm_design,      [('out_file'       ,
+                                                                'segmented_image'  )] ),
+        (ica_aroma,           glm_design,      [('output_file'    , 'input_file'   )] ),
+        (ica_aroma,           glm_design,      [('denType'        ,
+                                                                 'ica_aroma_type'  )] ),
+        (ica_aroma,           glm,             [('output_file'    , 'in_file'      )] ),
+        (glm_design,          glm,             [('design_matrix'   ,  'design'     )] ),
+        # Apply temporal filtering
+        (glm,                 temp_filt,       [('out_res'        , 'in_file'      )] ),
+        (temp_filt,           data_sink,       [('out_file'       , 'temp_filt'    )] ),
+        # Add mean to the dataset
+        (temp_filt,           final_mean,      [('out_file'       , 'in_file'      )] ),
+        (mean_ica,            final_mean,      [('out_file'       , 'operand_file' )] ),
+        (final_mean,          data_sink,       [('out_file'       , 'final_image'  )] ),
     ])
 
     # save graph of the workflow into the workflow_graph folder
