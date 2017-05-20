@@ -1,16 +1,3 @@
-def nipype_nuisance_regression(input_image, subject_output_path, design_output_file, ica_aroma_type):
-    import nipype.interfaces.fsl as fsl
-    """Perform Regression with nuisance regressors"""
-    # FIXME: pycharm cant find the command fsl_glm
-    fsl.FSLCommand.set_default_output_type('NIFTI_GZ')
-    logging.info('                   Calculating GLM with Nuisance Regressors')
-    glm = fsl.GLM()
-    glm.inputs.in_file = input_image
-    glm.inputs.design = design_output_file
-    glm.inputs.out_res_name = os.path.join(subject_output_path, 'denoised_func_data_%s_filt_wm_csf_extracted.nii.gz' %ica_aroma_type)
-    glm.inputs.out_file = os.path.join(subject_output_path, 'glm_betas.nii.gz')
-    glm.run()
-
 def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mask, region):
     import numpy as np
     """ iterate over each network and find the one with the highest probability of
@@ -203,11 +190,6 @@ def extract_roi(subjects,
             else:
                 np.savetxt(os.path.join(subject_path, 'full_network.txt'),
                            avg, delimiter=' ', fmt='%5e')
-
-
-            # perform GLM with WM and CSF ans nuisance regressors
-            if extract_csf_wm:
-                nipype_nuisance_regression(image_filename, subject_path, design_output_file, ica_aroma_type)
 
         else:
             # Load the network mask.
