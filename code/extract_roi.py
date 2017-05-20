@@ -1,13 +1,5 @@
-import os
-import logging
-import numpy as np
-import nibabel as nib
-import time
-import json
-import nipype.interfaces.fsl as fsl
-
-
 def nipype_nuisance_regression(input_image, subject_output_path, design_output_file, ica_aroma_type):
+    import nipype.interfaces.fsl as fsl
     """Perform Regression with nuisance regressors"""
     # FIXME: pycharm cant find the command fsl_glm
     fsl.FSLCommand.set_default_output_type('NIFTI_GZ')
@@ -15,12 +7,12 @@ def nipype_nuisance_regression(input_image, subject_output_path, design_output_f
     glm = fsl.GLM()
     glm.inputs.in_file = input_image
     glm.inputs.design = design_output_file
-    glm.inputs.demean = True
     glm.inputs.out_res_name = os.path.join(subject_output_path, 'denoised_func_data_%s_filt_wm_csf_extracted.nii.gz' %ica_aroma_type)
     glm.inputs.out_file = os.path.join(subject_output_path, 'glm_betas.nii.gz')
     glm.run()
 
 def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mask, region):
+    import numpy as np
     """ iterate over each network and find the one with the highest probability of
     including a specific region. Once the best network is found, compute the mean bold from
     that region. The mean bold will be used to compare among regions that belong
@@ -40,6 +32,8 @@ def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mas
 
 def dump_extract_roi_json_(output_base_path, network_type, subjects, ica_aroma_type, segmented_image_filename):
     output_path = os.path.join(output_base_path)
+    import json
+    import time
 
     parameters_list = {}
     timestamp = time.strftime("%Y%m%d%H%M%S")
@@ -88,6 +82,10 @@ def extract_roi(subjects,
          - network_comp  : Allow for comparison between networks and inside
                            networks
      """
+    import os
+    import numpy as np
+    import nibabel as nib
+    import logging
 
     # Only full_network does not require a network mask.
     if network_type != 'full_network' and network_mask_filename is None:
