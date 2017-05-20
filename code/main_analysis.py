@@ -130,11 +130,12 @@ preprocessing_input_basepath = os.path.join(base_path_in, 'reconall_data')
 preprocessing_output_basepath = os.path.join(base_path_out, 'preprocessing_out')
 # Input image for wm and csf extraction
 reconall_segmented_image_basepath = os.path.join(base_path_in, 'reconall_data')
-preprocessing_csf_wm_output = os.path.join(preprocessing_output_basepath, 'final_image_wm_csf_extracted')
+preprocessing_output = os.path.join(preprocessing_output_basepath, 'final_image')
 
 # ROI extraction
 # Input image for ROI extraction
 roi_input_segmented_image_filename = os.path.join(base_path_in, 'voi_extraction', 'seg_aparc_82roi_2mm.nii.gz')
+roi_input_lookuptable = os.path.join(base_path_in, 'voi_extraction', 'LookupTable')
 # Input region list for ROI extraction
 roi_input_segmented_regions_path = os.path.join(base_path_in, 'voi_extraction')
 # Image where between_network and within_network are specified.
@@ -181,9 +182,8 @@ log.addHandler(ch)
 ################################################################################
 # Local imports
 ################################################################################
-# FIXME: Move extract_roi to extract_roi.py
 from subjects import load_subjects
-from preprocessing_workflow import preprocess_data
+from preprocessing_workflow import preprocessing_pipeline, get_lookuptable
 from extract_roi import extract_roi
 from data_analysis import data_analysis
 from group_analysis_pairwise import group_analysis_pairwise
@@ -202,23 +202,13 @@ subjects = load_subjects(subjects_filename, args.golden_subjects, args.nsubjects
 if args.preprocess:
     # Note: Preprocessing is only running on the old cluster
     print('Preprocessing')
-    preprocess_data(subjects,
-                    preprocessing_input_basepath,
-                    preprocessing_output_basepath)
+    preprocessing_pipeline(subjects,
+                        preprocessing_input_basepath,
+                        preprocessing_output_basepath,
+                        )
 
     # extract csf and white matter
     print('Pre-processing.')
-
-if args.extract_csf_wm:
-    extract_roi(subjects,
-                args.network_type,
-                args.extract_csf_wm,
-                preprocessing_output_basepath,
-                reconall_segmented_image_basepath,
-                roi_input_segmented_regions_path,
-                preprocessing_csf_wm_output,
-                args.ica_aroma_type,
-                network_mask_filename=roi_input_network_filename)
 
 ############################################################################
 # ROI extraction
@@ -227,13 +217,15 @@ if args.extract_roi:
     if args.network_type is None:
         parser.error('You must specify: --network_type.')
 
+    lookuptable = get_lookuptable(roi_input_lookuptable)
+
     # Extract ROIs.
     extract_roi(subjects,
                 args.network_type,
                 args.extract_csf_wm,
-                roi_input_basepath,
+                preprocessing_output,
                 roi_input_segmented_image_filename,
-                roi_input_segmented_regions_path,
+                lookuptable,
                 roi_output_basepath,
                 args.ica_aroma_type,
                 network_mask_filename=roi_input_network_filename)

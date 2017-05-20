@@ -18,10 +18,12 @@ def most_likely_roi_network(netw, ntw_data, net_filter, boolean_ntw, boolean_mas
 
 
 def dump_extract_roi_json_(output_base_path, network_type, subjects, ica_aroma_type, segmented_image_filename):
-    output_path = os.path.join(output_base_path)
     import json
     import time
+    import os
 
+
+    output_path = os.path.join(output_base_path)
     parameters_list = {}
     timestamp = time.strftime("%Y%m%d%H%M%S")
 
@@ -39,9 +41,9 @@ def dump_extract_roi_json_(output_base_path, network_type, subjects, ica_aroma_t
 def extract_roi(subjects,
                 network_type,
                 extract_csf_wm,
-                input_basepath,
+                input_file,
                 segmented_image,
-                segmented_regions_path,
+                lookuptable,
                 output_basepath,
                 ica_aroma_type,
                 network_mask_filename=None):
@@ -83,29 +85,8 @@ def extract_roi(subjects,
         raise ValueError('CSF and white matter can only be extracted with the full network method')
 
     if extract_csf_wm:
-        segmented_regions_filename = os.path.join(segmented_regions_path, 'csf_wm_LookupTable')
-        lookuptable = np.genfromtxt(segmented_regions_filename,
-                                    dtype=[('intensity', '<i8'), ('regions', 'S31'), ('numbers', 'S10')],
-                                    delimiter=','
-                                    )
-    else:
-        # Load the segmented regions list.
-        segmented_regions_filename = os.path.join(segmented_regions_path, 'LookupTable')
-        lookuptable = np.genfromtxt(segmented_regions_filename,
-                                    dtype=[('numbers', '<i8'), ('regions', 'S31'), ('intensity', 'i4')],
-                                    delimiter=','
-                                    )
-
-
-    # Load the segmented image.
-    if not extract_csf_wm:
-        segmented_image_nib = nib.load(segmented_image)
-        segmented_image_data = segmented_image_nib.get_data()
-
+        subjects = [subjects]
     # Extract ROI for each subjects.
-
-    preprocessed_image_filename = 'denoised_func_data_%s_filt.nii.gz' % ica_aroma_type
-    wm_csf_extracted_image_filename = 'denoised_func_data_%s_filt_wm_csf_extracted.nii.gz' %ica_aroma_type
 
     logging.info('--------------------------------------------------------------------')
     logging.info(' Extract ROI')
@@ -120,22 +101,18 @@ def extract_roi(subjects,
         logging.info('Subject ID:        %s' %(subject))
         logging.info('')
 
-        # Load image to segment. It is subject specific if the analysis is csf and wm extraction
-        # FIXME
-        # Note: This step assumes that the aseg.auto image has already been registered to standart space and converted to
-        # nifti file
-        if extract_csf_wm:
-            segmented_image_filepath = os.path.join(input_basepath, 'warp_complete', 'warpaseg', subject, 'aseg.auto_trans_out.nii.gz')
-            segmented_image_nib = nib.load(segmented_image_filepath)
-            segmented_image_data = segmented_image_nib.get_data()
+        segmented_image_nib = nib.load(segmented_image)
+        segmented_image_data = segmented_image_nib.get_data()
 
         # Generate the output folder.
-        subject_path = os.path.join(output_basepath, subject,''.join(['icaroma_', ica_aroma_type]))
+        subject_path = os.path.join(output_basepath, subject, ''.join(['icaroma_', ica_aroma_type]))
         if not os.path.exists(subject_path):
             os.makedirs(subject_path)
 
         # Check if ROIs has been extracted in case yes, early exit
         if not extract_csf_wm:
+            input_file = os.path.join(input_file, subject, ''.join(['icaroma_', ica_aroma_type]),
+                                      'denoised_func_data_filt_wm_csf_extracted_filt_maths.nii.gz')
             if network_type == 'full_network' or 'between_network':
                 if os.path.exists(os.path.join(subject_path, network_type + '.txt')):
                     logging.info('Time course for this subject was already extracted')
@@ -145,15 +122,7 @@ def extract_roi(subjects,
                     logging.info('Time course for this subject was already extracted')
                     continue
 
-        # Load the subject input image.
-        if extract_csf_wm:
-            image_filename = os.path.join(input_basepath, 'final_image', subject, ''.join(['icaroma_', ica_aroma_type]),
-                                          preprocessed_image_filename)
-        else:
-            image_filename = os.path.join(input_basepath, 'final_image_wm_csf_extracted', subject, ''.join(['icaroma_', ica_aroma_type]),
-                                          wm_csf_extracted_image_filename)
-
-        image = nib.load(image_filename)
+        image = nib.load(input_file)
         image_data = image.get_data()
         ntpoints = image_data.shape[3]
 
@@ -186,7 +155,8 @@ def extract_roi(subjects,
                 # design_mean = np.mean(design, axis=0)
                 # design -= design_mean
                 design_output_file = os.path.join(subject_path, ''.join(['wm_csf_time_course', '.txt']))
-                np.savetxt(design_output_file, design, delimiter=' ', fmt='%5e')
+                np.savetxt(design_output_file, design, delimiter=' ')
+                return design_output_file
             else:
                 np.savetxt(os.path.join(subject_path, 'full_network.txt'),
                            avg, delimiter=' ', fmt='%5e')
