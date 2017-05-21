@@ -245,7 +245,7 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     glm_design.inputs.extract_csf_wm = True
     glm_design.inputs.network_mask_filename = None
     glm_design.inputs.lookuptable = get_lookuptable(segmented_region_path)
-    glm_design.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'final_image_wm_csf')
+    glm_design.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask')
 
     glm = Node(GLM(), name='GLM_Nuissance')
     glm.inputs.demean = True
