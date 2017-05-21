@@ -130,7 +130,7 @@ preprocessing_input_basepath = os.path.join(base_path_in, 'reconall_data')
 preprocessing_output_basepath = os.path.join(base_path_out, 'preprocessing_out')
 # Input image for wm and csf extraction
 reconall_segmented_image_basepath = os.path.join(base_path_in, 'reconall_data')
-preprocessing_output = os.path.join(preprocessing_output_basepath, 'final_image')
+preprocessing_output = os.path.join(preprocessing_output_basepath, 'final_image_wm_csf')
 
 # ROI extraction
 # Input image for ROI extraction

@@ -65,7 +65,7 @@ def get_VOIs(preprocessed_image, segmented_image_path, segmented_regions_path,
 def get_lookuptable(segmented_regions_file):
     import numpy as np
     lookuptable = np.genfromtxt(segmented_regions_file,
-                                names='intensity, regions, numbers',
+                                names='numbers, regions, intensity',
                                 dtype=None,
                                 delimiter=','
                                 )
@@ -89,7 +89,7 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     template = Info.standard_image('MNI152_T1_2mm.nii.gz')
 
     # Data Location
-    voi_in_dir = os.path.join(base_path, 'data_in', 'voi_extraction')
+    segmented_region_path = os.path.join(base_path, 'data_in', 'voi_extraction', 'csf_wm_LookupTable')
     data_in_dir = os.path.join(base_path, 'data_in', 'reconall_data')
     data_out_dir = os.path.join(base_path, 'data_out', preprocessing_type)
 
@@ -237,16 +237,13 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     # Extract the desing matrix
     glm_design = Node(name='GLM_Design_Matrix',
                       interface=Function(input_names=['subjects', 'network_type', 'extract_csf_wm',
-                                                      'input_basepath', 'input_file', 'segmented_image', 'lookuptable',
+                                                      'input_file', 'segmented_image', 'lookuptable',
                                                       'output_basepath', 'ica_aroma_type', 'network_mask_filename'],
                                          output_names=['design_matrix'],
                                          function=extract_roi))
     glm_design.inputs.network_type = 'full_network'
     glm_design.inputs.extract_csf_wm = True
     glm_design.inputs.network_mask_filename = None
-    glm_design.inputs.input_basepath = os.path.join(data_out_dir, 'preprocessing_out')
-    segmented_region_path = os.path.join(voi_in_dir, 'csf_wm_LookupTable')
-    #FIXME: rename this input
     glm_design.inputs.lookuptable = get_lookuptable(segmented_region_path)
     glm_design.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'final_image_wm_csf')
 
