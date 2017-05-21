@@ -234,23 +234,42 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     # Generate mean image of ICA-AROMA output
     mean_ica = Node(MeanImage(), name='Mean_Image_ICA')
 
-    # Extract the desing matrix
-    glm_design = Node(name='GLM_Design_Matrix',
+    # Extract the design matrix
+    glm_design_ica = Node(name='GLM_Design_Matrix_ICA',
                       interface=Function(input_names=['subjects', 'network_type', 'extract_csf_wm',
                                                       'input_file', 'segmented_image', 'lookuptable',
                                                       'output_basepath', 'ica_aroma_type', 'network_mask_filename'],
                                          output_names=['design_matrix'],
                                          function=extract_roi))
-    glm_design.inputs.network_type = 'full_network'
-    glm_design.inputs.extract_csf_wm = True
-    glm_design.inputs.network_mask_filename = None
-    glm_design.inputs.lookuptable = get_lookuptable(segmented_region_path)
-    glm_design.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask')
+    glm_design_ica.inputs.network_type = 'full_network'
+    glm_design_ica.inputs.extract_csf_wm = True
+    glm_design_ica.inputs.network_mask_filename = None
+    glm_design_ica.inputs.lookuptable = get_lookuptable(segmented_region_path)
+    glm_design_ica.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask')
 
-    glm = Node(GLM(), name='GLM_Nuissance')
-    glm.inputs.demean = True
-    glm.inputs.out_res_name = 'denoised_func_data_filt_wm_csf_extracted.nii.gz'
-    glm.inputs.out_file = 'glm_betas.nii.gz'
+    glm_design_only = Node(name='GLM_Design_Matrix_Only',
+                          interface=Function(input_names=['subjects', 'network_type', 'extract_csf_wm',
+                                                          'input_file', 'segmented_image', 'lookuptable',
+                                                          'output_basepath', 'ica_aroma_type', 'network_mask_filename'],
+                                             output_names=['design_matrix'],
+                                             function=extract_roi))
+    glm_design_only.inputs.network_type = 'full_network'
+    glm_design_only.inputs.extract_csf_wm = True
+    glm_design_only.inputs.network_mask_filename = None
+    glm_design_only.inputs.lookuptable = get_lookuptable(segmented_region_path)
+    glm_design_only.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask', 'glm_only')
+    # FIXME: check the script
+    glm_design_only.inputs.ica_aroma_type = 'glm_only'
+
+    glm_ica = Node(GLM(), name='GLM_Nuissance_ICA_aroma')
+    glm_ica.inputs.demean = True
+    glm_ica.inputs.out_res_name = 'denoised_func_data_filt_wm_csf_extracted.nii.gz'
+    glm_ica.inputs.out_file = 'glm_betas.nii.gz'
+
+    glm_only = Node(GLM(), name='GLM_Nuissance')
+    glm_only.inputs.demean = True
+    glm_only.inputs.out_res_name = 'func_data_filt_wm_csf_extracted.nii.gz'
+    glm_only.inputs.out_file = 'glm_betas.nii.gz'
 
     # spatial filtering
     iso_smooth_all = Node(IsotropicSmooth(), name='SpatialFilterAll')
@@ -259,16 +278,33 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     iso_smooth_mean = Node(IsotropicSmooth(), name='SpatialFilterMean')
     iso_smooth_mean.inputs.fwhm = 5
 
+    # Generate mean image for adding after the glm
+    mean_iso_smooth = Node(MeanImage(), name='Mean_Iso_Smmoth')
+
     # temporal filtering
     # note: TR for this experiment is 2 and we are setting a filter of 100s.
     # Therefore, fwhm = 0.5 Hrz/0.01 Hrz = 50.
     # The function here, however, requires the fwhm (aka sigma) of this value, hence, its half.
-    temp_filt = Node(TemporalFilter(), name='TemporalFilter')
-    temp_filt.inputs.highpass_sigma = 25
+    temp_filt_ica = Node(TemporalFilter(), name='TemporalFilter_ICA')
+    temp_filt_ica.inputs.highpass_sigma = 25
 
-    final_mean = Node(BinaryMaths(), name='AddMean')
-    final_mean.inputs.operation = 'add'
-    final_mean.inputs.terminal_output = 'file'
+    temp_filt_ica_glm = Node(TemporalFilter(), name='TemporalFilter_ICA_GLM')
+    temp_filt_ica_glm.inputs.highpass_sigma = 25
+
+    temp_filt_glm = Node(TemporalFilter(), name='TemporalFilter_GLM')
+    temp_filt_glm.inputs.highpass_sigma = 25
+
+    final_ica = Node(BinaryMaths(), name='AddMean_ICA')
+    final_ica.inputs.operation = 'add'
+    final_ica.inputs.terminal_output = 'file'
+
+    final_glm_ica = Node(BinaryMaths(), name='AddMean_GLM_ICA')
+    final_glm_ica.inputs.operation = 'add'
+    final_glm_ica.inputs.terminal_output = 'file'
+
+    final_mean_smooth = Node(BinaryMaths(), name='AddMean_Smooth')
+    final_mean_smooth.inputs.operation = 'add'
+    final_mean_smooth.inputs.terminal_output = 'file'
 
     #------------------------------------------------------------------------------
     #                             Set up Workflow
@@ -363,30 +399,59 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
         (warpall2file,        iso_smooth_all,  [('out_file'       , 'in_file'      )] ),
         (iso_smooth_all,      data_sink,       [('out_file'       ,
                                                               'spatial_filter.all' )] ),
-        # ICA-AROMA
+        # GLM only
+        (iso_smooth_all,      mean_iso_smooth, [('out_file'       , 'in_file'      )]),
+        (infosource,          glm_design_only, [('subject_id'     , 'subjects'     )] ),
+        (warpasegnii,         glm_design_only, [('out_file'       ,
+                                                                'segmented_image'  )] ),
+        (iso_smooth_all,      glm_design_only, [('out_file'      , 'input_file'    )] ),
+        (iso_smooth_all,      glm_only,        [('out_file'    ,   'in_file'    )] ),
+        (glm_design_only,     glm_only,        [('design_matrix'  ,  'design'      )] ),
+        # Apply temporal filtering (data after wm + csf extraction)
+        (glm_only,            temp_filt_glm,   [('out_res'       , 'in_file'       )] ),
+        (temp_filt_glm,       data_sink,       [('out_file'       ,
+                                                                    'temp_filt.glm')] ),
+        # Add mean to the dataset
+        (temp_filt_glm,      final_mean_smooth,[('out_file'       , 'in_file'      )] ),
+        (mean_iso_smooth,    final_mean_smooth,[('out_file'       , 'operand_file' )] ),
+        (final_mean_smooth,  data_sink,        [('out_file'       ,
+                                                            'final_image.glm_only')] ),
+        #                               ICA-AROMA
         # run ICA using normalised image
         (iso_smooth_all,      ica_aroma,      [('out_file'        , 'inFile'       )] ),
         (infosource,          ica_aroma,      [('subject_id'      , 'subject_id'   )] ),
         (mot_par,             ica_aroma,      [('par_file'        , 'mc'           )] ),
         (bet,                 ica_aroma,      [('mask_file'       , 'mask'         )] ),
+        # ICA-AROMA only
+        # Apply temporal filtering (data directly from ICA-aroma)
+        (ica_aroma,           temp_filt_ica,   [('output_file'    ,  'in_file'     )] ),
+        (temp_filt_ica,       data_sink,       [('out_file'       ,
+                                                                    'temp_filt.ica')] ),
+        (temp_filt_ica,       final_ica,       [('out_file'       , 'in_file'      )] ),
+        (mean_ica,            final_ica,       [('out_file'       , 'operand_file' )] ),
+        (final_ica,           data_sink,       [('out_file'       ,
+                                                                'final_image.aroma')] ),
+        # ICA-AROMA + GLM
         # ICA-AROMA mean image
         (ica_aroma,           mean_ica,        [('output_file'    , 'in_file'      )] ),
         # Extract CSF + WM
-        (infosource,          glm_design,      [('subject_id'     , 'subjects'     )] ),
-        (warpasegnii,         glm_design,      [('out_file'       ,
+        (infosource,          glm_design_ica,  [('subject_id'     , 'subjects'     )] ),
+        (warpasegnii,         glm_design_ica,  [('out_file'       ,
                                                                 'segmented_image'  )] ),
-        (ica_aroma,           glm_design,      [('output_file'    , 'input_file'   )] ),
-        (ica_aroma,           glm_design,      [('denType'        ,
+        (ica_aroma,           glm_design_ica,  [('output_file'    , 'input_file'   )] ),
+        (ica_aroma,           glm_design_ica,  [('denType'        ,
                                                                  'ica_aroma_type'  )] ),
-        (ica_aroma,           glm,             [('output_file'    , 'in_file'      )] ),
-        (glm_design,          glm,             [('design_matrix'   ,  'design'     )] ),
-        # Apply temporal filtering
-        (glm,                 temp_filt,       [('out_res'        , 'in_file'      )] ),
-        (temp_filt,           data_sink,       [('out_file'       , 'temp_filt'    )] ),
+        (ica_aroma,           glm_ica,         [('output_file'    ,   'in_file'    )] ),
+        (glm_design_ica,      glm_ica,         [('design_matrix'   ,  'design'     )] ),
+        # Apply temporal filtering (data after wm + csf extraction)
+        (glm_ica,             temp_filt_ica_glm,[('out_res'       , 'in_file'      )] ),
+        (temp_filt_ica_glm,   data_sink,       [('out_file'       ,
+                                                               'temp_filt.ica_glm' )] ),
         # Add mean to the dataset
-        (temp_filt,           final_mean,      [('out_file'       , 'in_file'      )] ),
-        (mean_ica,            final_mean,      [('out_file'       , 'operand_file' )] ),
-        (final_mean,          data_sink,       [('out_file'       , 'final_image'  )] ),
+        (temp_filt_ica_glm,   final_glm_ica,  [('out_file'       , 'in_file'      )] ),
+        (mean_ica,            final_glm_ica,  [('out_file'       , 'operand_file' )] ),
+        (final_glm_ica,      data_sink,       [('out_file'       ,
+                                                            'final_image.aroma_glm')] ),
     ])
 
     # save graph of the workflow into the workflow_graph folder
