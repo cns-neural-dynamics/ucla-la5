@@ -178,7 +178,7 @@ def check_number_networks(subjects, input_basepath, network_type):
 
 
 def calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type,
-                               data_analysis_type, ica_aroma_type, nclusters, rand_ind, pipeline_call=True):
+                               data_analysis_type, ica_aroma_type, glm_denoise, nclusters, rand_ind, pipeline_call=True):
     # Find number of network for dataset
     nnetwork_keys = check_number_networks(subjects, input_basepath, network_type)
 
@@ -195,17 +195,26 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
         # Import ROI data for each VOI.
         # The actual data depends on the network type.
         hilbert_transforms = {}
+
+        # Obtain correct path for the extracted ROI according with the type of ica_aroma and glm_analysis
+        if (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is False):
+            analysis_path = os.path.join('aroma', subject, ''.join(['icaroma_', ica_aroma_type]))
+        elif (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is True):
+            analysis_path = os.path.join('aroma_glm', subject, ''.join(['icaroma_', ica_aroma_type]))
+        elif (ica_aroma_type == 'no_ica') and (glm_denoise is True):
+            analysis_path = os.path.join('glm', subject)
+
         if network_type == 'between_network':
-            data_path = os.path.join(input_basepath, subject, ''.join(['icaroma_', ica_aroma_type]), 'between_network.txt')
+            data_path = os.path.join(input_basepath, analysis_path, 'between_network.txt')
             data = np.genfromtxt(data_path)
             hilbert_transforms[0] = compute_hilbert_tranform(data)
         elif network_type == 'within_network':
             for network in range(nnetwork_keys):
-                data_path = os.path.join(input_basepath, subject, ''.join(['icaroma_', ica_aroma_type]), 'within_network_%d.txt' % network)
+                data_path = os.path.join(input_basepath, analysis_path, 'within_network_%d.txt' % network)
                 data = np.genfromtxt(data_path)
                 hilbert_transforms[network] = compute_hilbert_tranform(data)
         elif network_type == 'full_network':
-            data_path = os.path.join(input_basepath, subject, ''.join(['icaroma_', ica_aroma_type]), 'full_network.txt')
+            data_path = os.path.join(input_basepath, analysis_path, 'full_network.txt')
             data = np.genfromtxt(data_path)
             hilbert_transforms[0] = compute_hilbert_tranform(data)
 
@@ -407,6 +416,7 @@ def data_analysis(subjects,
                   window_type,
                   data_analysis_type,
                   ica_aroma_type,
+                  glm_denoise,
                   nclusters,
                   rand_ind,
                   golden_subjects):
@@ -456,7 +466,7 @@ def data_analysis(subjects,
     logging.info('')
 
     calculate_dynamic_measures(subjects, input_basepath, output_basepath, network_type, window_size, window_type,
-                               data_analysis_type, ica_aroma_type, nclusters, rand_ind)
+                               data_analysis_type, ica_aroma_type, glm_denoise, nclusters, rand_ind)
 
     # Calculate the optimal k from the healthy subjects only.
     # Note: This is not needed with the BOLD data analysis. The optimal k will

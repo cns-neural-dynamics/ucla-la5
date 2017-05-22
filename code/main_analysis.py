@@ -260,6 +260,7 @@ if args.analyse_data:
                   args.window_type,
                   args.data_analysis_type,
                   args.ica_aroma_type,
+                  args.glm_denoise,
                   args.nclusters,
                   args.rand_ind,
                   args.golden_subjects)
