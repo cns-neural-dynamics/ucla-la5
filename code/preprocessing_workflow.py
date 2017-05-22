@@ -237,29 +237,30 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     # Extract the design matrix
     glm_design_ica = Node(name='GLM_Design_Matrix_ICA',
                       interface=Function(input_names=['subjects', 'network_type', 'extract_csf_wm',
-                                                      'input_file', 'segmented_image', 'lookuptable',
+                                                      'glm_denoise', 'input_file', 'segmented_image', 'lookuptable',
                                                       'output_basepath', 'ica_aroma_type', 'network_mask_filename'],
                                          output_names=['design_matrix'],
                                          function=extract_roi))
     glm_design_ica.inputs.network_type = 'full_network'
     glm_design_ica.inputs.extract_csf_wm = True
+    glm_design_ica.inputs.glm_denoise = False
     glm_design_ica.inputs.network_mask_filename = None
     glm_design_ica.inputs.lookuptable = get_lookuptable(segmented_region_path)
-    glm_design_ica.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask')
+    glm_design_ica.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask', 'ica_glm')
 
     glm_design_only = Node(name='GLM_Design_Matrix_Only',
                           interface=Function(input_names=['subjects', 'network_type', 'extract_csf_wm',
-                                                          'input_file', 'segmented_image', 'lookuptable',
+                                                          'glm_denoise', 'input_file', 'segmented_image', 'lookuptable',
                                                           'output_basepath', 'ica_aroma_type', 'network_mask_filename'],
                                              output_names=['design_matrix'],
                                              function=extract_roi))
     glm_design_only.inputs.network_type = 'full_network'
     glm_design_only.inputs.extract_csf_wm = True
+    glm_design_only.inputs.glm_denoise = False
     glm_design_only.inputs.network_mask_filename = None
     glm_design_only.inputs.lookuptable = get_lookuptable(segmented_region_path)
-    glm_design_only.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask', 'glm_only')
-    # FIXME: check the script
-    glm_design_only.inputs.ica_aroma_type = 'glm_only'
+    glm_design_only.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask', 'glm')
+    glm_design_only.inputs.ica_aroma_type = 'no_ica'
 
     glm_ica = Node(GLM(), name='GLM_Nuissance_ICA_aroma')
     glm_ica.inputs.demean = True
@@ -415,7 +416,7 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
         (temp_filt_glm,      final_mean_smooth,[('out_file'       , 'in_file'      )] ),
         (mean_iso_smooth,    final_mean_smooth,[('out_file'       , 'operand_file' )] ),
         (final_mean_smooth,  data_sink,        [('out_file'       ,
-                                                            'final_image.glm_only')] ),
+                                                            'final_image.glm')] ),
         #                               ICA-AROMA
         # run ICA using normalised image
         (iso_smooth_all,      ica_aroma,      [('out_file'        , 'inFile'       )] ),

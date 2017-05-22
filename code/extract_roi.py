@@ -41,6 +41,7 @@ def dump_extract_roi_json_(output_base_path, network_type, subjects, ica_aroma_t
 def extract_roi(subjects,
                 network_type,
                 extract_csf_wm,
+                glm_denoise,
                 input_file,
                 segmented_image,
                 lookuptable,
@@ -84,6 +85,9 @@ def extract_roi(subjects,
     if network_type != 'full_network' and extract_csf_wm == 'csf_wm':
         raise ValueError('CSF and white matter can only be extracted with the full network method')
 
+    if ica_aroma_type == 'no_ica' and glm_denoise == False:
+        raise ValueError('If no ica-type was passed the glm_denoise must be True')
+
     if extract_csf_wm:
         subjects = [subjects]
     # Extract ROI for each subjects.
@@ -96,6 +100,7 @@ def extract_roi(subjects,
     logging.info('network type:      %s' %(network_type))
     logging.info('ica aroma type:    %s' %(ica_aroma_type))
     logging.info('extract CSF/WM:    %s' %(extract_csf_wm))
+    logging.info('denoised with GLM: %s' %(glm_denoise))
 
     for subject in subjects:
         logging.info('Subject ID:        %s' %(subject))
@@ -104,15 +109,32 @@ def extract_roi(subjects,
         segmented_image_nib = nib.load(segmented_image)
         segmented_image_data = segmented_image_nib.get_data()
 
-        # Generate the output folder.
-        subject_path = os.path.join(output_basepath, subject, ''.join(['icaroma_', ica_aroma_type]))
-        if not os.path.exists(subject_path):
-            os.makedirs(subject_path)
+        # Generate the output folder. Specify input filename
+        if extract_csf_wm:
+            subject_path = os.path.join(output_basepath, subject)
+            if not os.path.exists(subject_path):
+                os.makedirs(subject_path)
 
-        # Check if ROIs has been extracted in case yes, early exit
-        if not extract_csf_wm:
-            input_file = os.path.join(input_file, subject, ''.join(['icaroma_', ica_aroma_type]),
-                                      'denoised_func_data_filt_wm_csf_extracted_filt_maths.nii.gz')
+        else:
+            if (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is False):
+                analysis_path = os.path.join('aroma', subject, ''.join(['icaroma_', ica_aroma_type]))
+                subject_path = os.path.join(output_basepath, analysis_path)
+                filename = 'denoised_func_data_%s_filt_maths.nii.gz' %ica_aroma_type
+            elif (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is True):
+                analysis_path = os.path.join('aroma_glm', subject, ''.join(['icaroma_', ica_aroma_type]))
+                subject_path = os.path.join(output_basepath, analysis_path)
+                filename = 'denoised_func_data_filt_wm_csf_extracted_filt_maths.nii.gz'
+            elif (ica_aroma_type == 'no_ica') and (glm_denoise is True):
+                analysis_path = os.path.join('glm', subject)
+                subject_path = os.path.join(output_basepath, analysis_path)
+                filename = 'func_data_filt_wm_csf_extracted_filt_maths.nii.gz'
+            if not os.path.exists(subject_path):
+                os.makedirs(subject_path)
+
+            input_file_path = os.path.join(input_file, analysis_path, filename)
+            input_file = input_file_path
+
+            # Check if ROIs has been extracted in case yes, early exit
             if network_type == 'full_network' or 'between_network':
                 if os.path.exists(os.path.join(subject_path, network_type + '.txt')):
                     logging.info('Time course for this subject was already extracted')

@@ -16,7 +16,7 @@ window_types = ['non-sliding', 'sliding']
 data_analysis_types = ['BOLD', 'synchrony', 'graph_analysis']
 group_analysis_types = ['hutchenson', 'ttest', '1ANOVA']
 analysis_types = ['rest', 'task']
-ica_aroma_types = ['aggr', 'nonaggr']
+ica_aroma_types = ['aggr', 'nonaggr', 'no_ica']
 
 ############################################################################
 # Argument parsing
@@ -113,6 +113,12 @@ parser.add_argument(
     choices=ica_aroma_types,
     help='ICA aroma type. Chose from: ' + ', '.join(ica_aroma_types)
 )
+parser.add_argument(
+    '--glm_denoise',
+    dest='glm_denoise',
+    action='store_true',
+    help='Perfrom denoising with GLM'
+)
 args = parser.parse_args()
 
 ################################################################################
@@ -130,7 +136,6 @@ preprocessing_input_basepath = os.path.join(base_path_in, 'reconall_data')
 preprocessing_output_basepath = os.path.join(base_path_out, 'preprocessing_out')
 # Input image for wm and csf extraction
 reconall_segmented_image_basepath = os.path.join(base_path_in, 'reconall_data')
-preprocessing_output = os.path.join(preprocessing_output_basepath, 'wm_csf_mask')
 
 # ROI extraction
 # Input image for ROI extraction
@@ -140,7 +145,7 @@ roi_input_lookuptable = os.path.join(base_path_in, 'voi_extraction', 'LookupTabl
 roi_input_segmented_regions_path = os.path.join(base_path_in, 'voi_extraction')
 # Image where between_network and within_network are specified.
 roi_input_network_filename = os.path.join(base_path_in, 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
-roi_input_basepath = preprocessing_output_basepath
+roi_input_basepath = os.path.join(preprocessing_output_basepath, 'final_image')
 roi_output_basepath = os.path.join(base_path_out, 'extract_roi')
 
 # Data analysis
@@ -223,7 +228,8 @@ if args.extract_roi:
     extract_roi(subjects,
                 args.network_type,
                 args.extract_csf_wm,
-                preprocessing_output,
+                args.glm_denoise,
+                roi_input_basepath,
                 roi_input_segmented_image_filename,
                 lookuptable,
                 roi_output_basepath,
