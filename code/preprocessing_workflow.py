@@ -13,6 +13,7 @@ from argparse import ArgumentParser
 from nipypext import nipype_wrapper
 from extract_roi import extract_roi
 
+
 def get_file(in_file):
     """
     ApplyTransforms ouptu is a list. This function gets the path to warped file
