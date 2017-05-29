@@ -103,8 +103,8 @@ def extract_roi(subjects,
     logging.info('denoised with GLM: %s' %(glm_denoise))
 
     for subject in subjects:
-        logging.info('Subject ID:        %s' %(subject))
         logging.info('')
+        logging.info('Subject ID:        %s' %(subject))
 
         segmented_image_nib = nib.load(segmented_image)
         segmented_image_data = segmented_image_nib.get_data()
@@ -114,6 +114,9 @@ def extract_roi(subjects,
             subject_path = os.path.join(output_basepath, subject)
             if not os.path.exists(subject_path):
                 os.makedirs(subject_path)
+            image = nib.load(input_file)
+            image_data = image.get_data()
+            ntpoints = image_data.shape[3]
 
         else:
             if (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is False):
@@ -131,8 +134,6 @@ def extract_roi(subjects,
             if not os.path.exists(subject_path):
                 os.makedirs(subject_path)
 
-            input_file_path = os.path.join(input_file, analysis_path, filename)
-            input_file = input_file_path
 
             # Check if ROIs has been extracted in case yes, early exit
             if network_type == 'full_network' or 'between_network':
@@ -144,9 +145,12 @@ def extract_roi(subjects,
                     logging.info('Time course for this subject was already extracted')
                     continue
 
-        image = nib.load(input_file)
-        image_data = image.get_data()
-        ntpoints = image_data.shape[3]
+            roi_base_path = input_file
+            input_file_path = os.path.join(roi_base_path, analysis_path, filename)
+            image = nib.load(input_file_path)
+            image_data = image.get_data()
+            ntpoints = image_data.shape[3]
+
 
         if network_type == 'full_network':
             # Calculate the average BOLD signal over all regions.
