@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 
 import os
 from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth, BET, GLM, BinaryMaths
@@ -257,7 +258,7 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
                                              function=extract_roi))
     glm_design_only.inputs.network_type = 'full_network'
     glm_design_only.inputs.extract_csf_wm = True
-    glm_design_only.inputs.glm_denoise = False
+    glm_design_only.inputs.glm_denoise = True
     glm_design_only.inputs.network_mask_filename = None
     glm_design_only.inputs.lookuptable = get_lookuptable(segmented_region_path)
     glm_design_only.inputs.output_basepath = os.path.join(data_out_dir, 'preprocessing_out', 'wm_csf_mask', 'glm')
