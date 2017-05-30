@@ -63,6 +63,7 @@ def group_analysis_pairwise(subjects,
         measures = ['BOLD']
     # All 3 analysis are comparing the entropy values betwen groups
     parameters = ['entropy']
+    logging.info('measures:           %s' %(measures))
 
     # Generate the output folders.
     group_output_basepath = group_analysis_group_basepath(output_basepath,
@@ -96,10 +97,10 @@ def group_analysis_pairwise(subjects,
         if data_analysis_type == 'graph_analysis':
             data_filepath = os.path.join(subject_basepath,
                                          'graph_analysis_shannon_entropy_measures.pickle')
-            # load data for flexibilty
             graph_measures_path = os.path.join(subject_basepath,
                                                'graph_analysis_measures.pickle')
-            data_flexibility = pickle.load(open(graph_measures_path, 'rb'))
+            # load data for flexibilty and global efficiecy (they are saved in a separate pickles)
+            data_graph_measures = pickle.load(open(graph_measures_path, 'rb'))
 
         elif data_analysis_type == 'synchrony':
             data_filepath = os.path.join(subject_basepath,
@@ -125,7 +126,15 @@ def group_analysis_pairwise(subjects,
                     if 'flexibility' not in healthy_parameters[network]:
                         healthy_parameters[network]['flexibility'] = {}
                         healthy_parameters[network]['flexibility']['mean'] = []
-                    healthy_parameters[network]['flexibility']['mean'].append(data_flexibility[network]['flexibility'])
+                        healthy_parameters[network]['flexibility']['std'] = []
+                    healthy_parameters[network]['flexibility']['mean'].append(np.mean(data_graph_measures[network]['flexibility']))
+                    healthy_parameters[network]['flexibility']['std'].append(np.std(data_graph_measures[network]['flexibility']))
+                    if 'global_efficiency' not in healthy_parameters[network]:
+                        healthy_parameters[network]['global_efficiency'] = {}
+                        healthy_parameters[network]['global_efficiency']['mean'] = []
+                        healthy_parameters[network]['global_efficiency']['std'] = []
+                    healthy_parameters[network]['global_efficiency']['mean'].append(np.mean(data_graph_measures[network]['global_efficiency']))
+                    healthy_parameters[network]['global_efficiency']['std'].append(np.std(data_graph_measures[network]['global_efficiency']))
             elif int(subject.strip('sub-')) > 50000:
                 if network not in schizo_parameters:
                     schizo_parameters[network] = {}
@@ -140,7 +149,15 @@ def group_analysis_pairwise(subjects,
                     if 'flexibility' not in schizo_parameters[network]:
                         schizo_parameters[network]['flexibility'] = {}
                         schizo_parameters[network]['flexibility']['mean'] = []
-                    schizo_parameters[network]['flexibility']['mean'].append(data_flexibility[network]['flexibility'])
+                        schizo_parameters[network]['flexibility']['std'] = []
+                    schizo_parameters[network]['flexibility']['mean'].append(np.mean(data_graph_measures[network]['flexibility']))
+                    schizo_parameters[network]['flexibility']['std'].append(np.std(data_graph_measures[network]['flexibility']))
+                    if 'global_efficiency' not in schizo_parameters[network]:
+                        schizo_parameters[network]['global_efficiency'] = {}
+                        schizo_parameters[network]['global_efficiency']['std'] = []
+                        schizo_parameters[network]['global_efficiency']['mean'] = []
+                    schizo_parameters[network]['global_efficiency']['std'].append(np.std(data_graph_measures[network]['global_efficiency']))
+                    schizo_parameters[network]['global_efficiency']['mean'].append(np.mean(data_graph_measures[network]['global_efficiency']))
             else:
                  raise ValueError('Unexpected subject ID: %s.' % (subject))
 

@@ -621,8 +621,8 @@ def data_analysis(subjects,
 
                     # calculate flexibility for each node
                     flexibility_regions = np.sum(flexibility_time, axis=0)
-                    mean_flexibility = np.mean(flexibility_regions)
-                    graph_theory_measures[network]['flexibility'] = mean_flexibility
+                    graph_theory_measures[network]['flexibility'] = flexibility_regions
+
 
                     # Note: Because K-means will be performed over time and of the way
                     #  the data is defined all measures will need to transposed.
@@ -660,7 +660,7 @@ def data_analysis(subjects,
                     global_efficiency = np.zeros(ntpoints)
                     for t in range(ntpoints):
                         global_efficiency[t] = efficiency_bin(synchrony_bins[network][:, :, t])
-                    networks_global_efficiency[network] = global_efficiency
+                    graph_theory_measures[network]['global_efficiency'] = global_efficiency
 
                     # Weight
                     # -------------------
