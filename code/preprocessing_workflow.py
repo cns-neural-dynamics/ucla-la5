@@ -458,8 +458,8 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     ])
 
     # save graph of the workflow into the workflow_graph folder
-    preproc.write_graph(os.path.join(data_out_dir, 'preprocessing_out', 'workflow_graph',
-        'workflow_graph.dot'))
+    # preproc.write_graph(os.path.join(data_out_dir, 'preprocessing_out', 'workflow_graph',
+    #     'workflow_graph.dot'))
     preproc.run()
     # preproc.run(plugin = 'SGEGraph', plugin_args = '-q short.q')
     # preproc.run('MultiProc', plugin_args={'n_procs': 8})
