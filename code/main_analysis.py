@@ -167,7 +167,7 @@ subjects_filename = 'subjects.json'
 #       and before any local code is executed.
 import logging
 timestamp = time.strftime("%Y%m%d%H%M%S")
-log_filename = os.path.join(base_path_out, '%s_ucla5.log' % timestamp)
+log_filename = os.path.join(base_path_out, '%s_ucla5_%d.log' %(timestamp, args.nclusters))
 formatter = logging.Formatter('%(message)s')
 log = logging.getLogger('')
 log.setLevel(logging.DEBUG)
