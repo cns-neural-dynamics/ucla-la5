@@ -1,6 +1,6 @@
 import subprocess
 
-subjects = ['sub-10225', 'sub-10227',
+subjects = ['sub-10159', 'sub-10206', 'sub-10217', 'sub-10225', 'sub-10227',
             'sub-10228', 'sub-10235', 'sub-10249', 'sub-10269', 'sub-10271',
             'sub-10273', 'sub-10274', 'sub-10290', 'sub-10292', 'sub-10304',
             'sub-10316', 'sub-10321', 'sub-10325', 'sub-10329', 'sub-10339',
@@ -16,9 +16,14 @@ subjects = ['sub-10225', 'sub-10227',
             'sub-50056', 'sub-50058', 'sub-50059', 'sub-50060', 'sub-50061',
             'sub-50064', 'sub-50066', 'sub-50067', 'sub-50069', 'sub-50073',
             'sub-50075', 'sub-50076', 'sub-50077', 'sub-50080', 'sub-50081',
-            'sub-50083', 'sub-50085']
+            'sub-50083', 'sub-50085',
+            'sub-10624', 'sub-10629', 'sub-10631', 'sub-10638', 'sub-10674',
+            'sub-10678', 'sub-10680', 'sub-10686', 'sub-10692', 'sub-10697',
+            'sub-10704', 'sub-10707', 'sub-10708', 'sub-10719', 'sub-10724',
+            'sub-10746', 'sub-10762', 'sub-10779', 'sub-10785', 'sub-10788'
+           ]
 
 for subject in subjects:
-    cmd = "tmux new-session -d -s {0} 'python preprocessing_workflow.py -s {0} -p /group/dynamics/scz_dynamics/ucla-la5 -t task'".format(subject)
+    cmd = "tmux new-session -d -s {0} 'python preprocessing_workflow.py -s {0} -p /group/dynamics/scz_dynamics/ucla-la5 -t rest'".format(subject)
     ob_id = subprocess.check_output(cmd, shell=True)
     print 'Done {0}'.format(subject)
