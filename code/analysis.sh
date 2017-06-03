@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source activate ucla-la5
 
-allclusters=(3 4 5 6 7 8 9 10)
+allclusters=(3)
 tasktype=rest
 
 for i in "${allclusters[@]}"
@@ -11,8 +11,8 @@ done
 
 # wait until the last of the job for golden subjects has been submitted
 #$? corresponds to the output from the previous commit
-tmux has-session -t cluster"${allclusters[-1]}"_gs
-while [ $? -ne 0 ];
+cmd="tmux has-session -t cluster"${allclusters[-1]}"_gs"
+while [ $cmd -ne 0 ];
 do
     sleep 10s
 done
@@ -20,5 +20,5 @@ done
 echo "submitting analysis"
 for i in "${allclusters[@]}"
 do
-    tmux new-session -d -s cluster"$i" 'python main_analysis.py -n 20 -a -g --analysis-type '"$tasktype"' --data-analysis-type graph_analysis --window-type sliding --network-type full_network --ica_aroma-type nonaggr --glm_denoise --nclusters '"$i"' --rand-ind 20 --group-analysis-type ttest'
+    tmux new-session -d -s cluster"$i" 'python main_analysis.py -n 20 -a -r -g --analysis-type '"$tasktype"' --data-analysis-type graph_analysis --window-type sliding --network-type full_network --ica_aroma-type nonaggr --glm_denoise --nclusters '"$i"' --rand-ind 20 --group-analysis-type ttest'
 done
