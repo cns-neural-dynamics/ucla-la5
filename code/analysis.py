@@ -3,7 +3,7 @@ import libtmux
 import time
 
 
-all_clusters = [3]
+all_clusters = [3, 4, 5, 6, 7, 8, 9, 1, 4, 5, 6, 7, 8, 9, 10]
 tasktype='rest'
 server = libtmux.Server()
 
