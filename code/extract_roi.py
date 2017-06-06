@@ -120,17 +120,17 @@ def extract_roi(subjects,
 
         else:
             if (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is False):
-                analysis_path = os.path.join('aroma', subject, ''.join(['icaroma_', ica_aroma_type]))
+                analysis_path = os.path.join('ica', subject, ''.join(['icaroma_', ica_aroma_type]))
                 subject_path = os.path.join(output_basepath, analysis_path)
-                filename = 'denoised_func_data_%s_filt_maths.nii.gz' %ica_aroma_type
+                filename = 'denoised_func_data_%s_filt.nii.gz' %ica_aroma_type
             elif (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is True):
-                analysis_path = os.path.join('aroma_glm', subject, ''.join(['icaroma_', ica_aroma_type]))
+                analysis_path = os.path.join('ica_glm', subject, ''.join(['icaroma_', ica_aroma_type]))
                 subject_path = os.path.join(output_basepath, analysis_path)
-                filename = 'denoised_func_data_filt_wm_csf_extracted_filt_maths.nii.gz'
+                filename = 'denoised_func_data_filt_wm_csf_extracted_filt.nii.gz'
             elif (ica_aroma_type == 'no_ica') and (glm_denoise is True):
                 analysis_path = os.path.join('glm', subject)
                 subject_path = os.path.join(output_basepath, analysis_path)
-                filename = 'func_data_filt_wm_csf_extracted_filt_maths.nii.gz'
+                filename = 'func_data_filt_wm_csf_extracted_filt.nii.gz'
             if not os.path.exists(subject_path):
                 os.makedirs(subject_path)
 

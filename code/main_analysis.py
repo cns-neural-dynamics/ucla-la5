@@ -145,7 +145,7 @@ roi_input_lookuptable = os.path.join(base_path_in, 'voi_extraction', 'LookupTabl
 roi_input_segmented_regions_path = os.path.join(base_path_in, 'voi_extraction')
 # Image where between_network and within_network are specified.
 roi_input_network_filename = os.path.join(base_path_in, 'voi_extraction', 'PNAS_Smith09_rsn10.nii')
-roi_input_basepath = os.path.join(preprocessing_output_basepath, 'final_image')
+roi_input_basepath = os.path.join(preprocessing_output_basepath, 'temp_filt')
 roi_output_basepath = os.path.join(base_path_out, 'extract_roi')
 
 # Data analysis

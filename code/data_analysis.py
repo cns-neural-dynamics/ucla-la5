@@ -12,8 +12,6 @@ import numpy as np
 import pickle
 import os
 import glob
-from nitime.timeseries import TimeSeries
-from nitime.analysis import FilterAnalyzer
 from scipy.signal import hilbert
 from scipy.stats import entropy
 from bct import (degrees_und, distance_bin, transitivity_bu, clustering_coef_bu,
@@ -198,9 +196,9 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
 
         # Obtain correct path for the extracted ROI according with the type of ica_aroma and glm_analysis
         if (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is False):
-            analysis_path = os.path.join('aroma', subject, ''.join(['icaroma_', ica_aroma_type]))
+            analysis_path = os.path.join('ica', subject, ''.join(['icaroma_', ica_aroma_type]))
         elif (ica_aroma_type in ['aggr', 'nonaggr']) and (glm_denoise is True):
-            analysis_path = os.path.join('aroma_glm', subject, ''.join(['icaroma_', ica_aroma_type]))
+            analysis_path = os.path.join('ica_glm', subject, ''.join(['icaroma_', ica_aroma_type]))
         elif (ica_aroma_type == 'no_ica') and (glm_denoise is True):
             analysis_path = os.path.join('glm', subject)
 
@@ -257,22 +255,12 @@ def calculate_dynamic_measures(subjects, input_basepath, output_basepath, networ
             logging.info('    Done')
 
 
-def compute_hilbert_tranform(data, TR=2, upper_bound=0.1, lower_bound=0.04):
+def compute_hilbert_tranform(data):
     """ Perform Hilbert Transform on given data. This allows extraction of phase
      information of the empirical data"""
-    # Initialise TimeSeries object
-    T = TimeSeries(data, sampling_interval=TR)
-    # Initialise Filter and set band pass filter to be between 0.04 and 0.07 Hz
-    # - as described on the Glerean-2012Functional paper
-    F = FilterAnalyzer(T, ub=upper_bound, lb=lower_bound)
-    # Obtain Filtered data from the TimeSeries object
-    filtered_data = F.filtered_fourier[:]
-    # Demean data: Each region (row)  is subtracted to its own mean
-    for row in range(filtered_data.shape[0]):
-        filtered_data[row] -= filtered_data[row].mean()
 
     # Perform Hilbert transform on filtered and demeaned data
-    hiltrans = hilbert(filtered_data)
+    hiltrans = hilbert(data)
     # discard first and last 10 time steps to avoid border effects caused by the
     # Hilbert tranform
     hiltrans = hiltrans[:, 10:-10]

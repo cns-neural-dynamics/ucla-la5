@@ -289,13 +289,16 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     # Therefore, fwhm = 0.5 Hrz/0.01 Hrz = 50.
     # The function here, however, requires the fwhm (aka sigma) of this value, hence, its half.
     temp_filt_ica = Node(TemporalFilter(), name='TemporalFilter_ICA')
-    temp_filt_ica.inputs.highpass_sigma = 25
+    temp_filt_ica.inputs.highpass_sigma = 2.5
+    temp_filt_ica.inputs.lowpass_sigma = 6.5
 
     temp_filt_ica_glm = Node(TemporalFilter(), name='TemporalFilter_ICA_GLM')
-    temp_filt_ica_glm.inputs.highpass_sigma = 25
+    temp_filt_ica_glm.inputs.highpass_sigma = 2.5
+    temp_filt_ica_glm.inputs.lowpass_sigma = 6.5
 
     temp_filt_glm = Node(TemporalFilter(), name='TemporalFilter_GLM')
-    temp_filt_glm.inputs.highpass_sigma = 25
+    temp_filt_glm.inputs.highpass_sigma = 2.5
+    temp_filt_glm.inputs.lowpass_sigma = 6.5
 
     final_ica = Node(BinaryMaths(), name='AddMean_ICA')
     final_ica.inputs.operation = 'add'
@@ -458,8 +461,8 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     ])
 
     # save graph of the workflow into the workflow_graph folder
-    preproc.write_graph(os.path.join(data_out_dir, 'preprocessing_out', 'workflow_graph',
-        'workflow_graph.dot'))
+    # preproc.write_graph(os.path.join(data_out_dir, 'preprocessing_out', 'workflow_graph',
+    #     'workflow_graph.dot'))
     preproc.run()
     # preproc.run(plugin = 'SGEGraph', plugin_args = '-q short.q')
     # preproc.run('MultiProc', plugin_args={'n_procs': 8})
