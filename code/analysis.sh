@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
 source activate ucla-la5
 
-allclusters=(3)
+allclusters=(3 5)
 tasktype=rest
 
-for i in "${allclusters[@]}"
-do
-    tmux new-session -d -s cluster"$i"_gs 'python main_analysis.py -n 1 -r -a -c --analysis-type '"$tasktype"' --data-analysis-type graph_analysis --window-type sliding --network-type full_network --ica_aroma-type nonaggr --glm_denoise --nclusters '"$i"' --rand-ind 20 --group-analysis-type ttest'
+for i in "${allclusters[@]}"; do
+    srun -n 1 python main_analysis.py -n 1 -r -a -c \
+        --analysis-type "$tasktype" --data-analysis-type graph_analysis \
+        --window-type sliding --network-type full_network \
+        --ica_aroma-type nonaggr --glm_denoise --nclusters "$i" --rand-ind 20 \
+        --group-analysis-type ttest &> /dev/null & pids+=($!)
 done
 
-# wait until the last of the job for golden subjects has been submitted
-#$? corresponds to the output from the previous commit
-cmd="tmux has-session -t cluster"${allclusters[-1]}"_gs"
-while [ $cmd -ne 0 ];
-do
-    sleep 10s
+for pid in "${pids[@]}"; do
+   wait "$pid"
+   echo $pid
 done
 
-echo "submitting analysis"
-for i in "${allclusters[@]}"
-do
-    tmux new-session -d -s cluster"$i" 'python main_analysis.py -n 20 -a -r -g --analysis-type '"$tasktype"' --data-analysis-type graph_analysis --window-type sliding --network-type full_network --ica_aroma-type nonaggr --glm_denoise --nclusters '"$i"' --rand-ind 20 --group-analysis-type ttest'
+for i in "${allclusters[@]}"; do
+    srun -n 1 python main_analysis.py -n 20 -a -r -g \
+        --analysis-type "$tasktype" --data-analysis-type graph_analysis \
+        --window-type sliding --network-type full_network \
+        --ica_aroma-type nonaggr --glm_denoise --nclusters "$i" --rand-ind 20 \
+        --group-analysis-type ttest &> /dev/null & pids+=($!)
 done
