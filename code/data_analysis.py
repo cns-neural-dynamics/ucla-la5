@@ -18,6 +18,7 @@ from bct import (degrees_und, distance_bin, transitivity_bu, clustering_coef_bu,
                  randmio_und_connected, charpath, clustering, breadthdist, efficiency_bin,
                  community_louvain)
 from sklearn.cluster import KMeans
+from sklearn import preprocessing
 
 
 
@@ -112,7 +113,7 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, subjects, n
                                           network_type)
 
     # Calculate the optimal k for each subject's network.
-    healthy_k_optima = {key: [] for key in range(nnetwork_keys)}
+    healthy_k_optima = {str(key): [] for key in range(nnetwork_keys)}
     for subject in subjects:
         # Load the mean_synchrony for the subject.
         subject_path = data_analysis_subject_basepath(output_basepath,
@@ -137,7 +138,7 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, subjects, n
             nregions = mean_synchrony[network].shape[0]
             indices = np.tril_indices(nregions)
             indices = zip(indices[0], indices[1])
-            healthy_k_optima[network].append(
+            healthy_k_optima[str(network)].append(
                 calculate_subject_optimal_k(mean_synchrony[network], indices))
 
     # Find optimal mean of healthy subjects.
@@ -145,8 +146,8 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, subjects, n
     logging.info('')
     logging.info('* OPTIMAL MEAN THRESHOLD:')
     for network in range(nnetwork_keys):
-        k_optima[network] = np.mean(healthy_k_optima[network])
-        logging.info('Network %d: %3f' % (network, k_optima[network]))
+        k_optima[str(network)] = np.mean(healthy_k_optima[str(network)])
+        logging.info('Network %d: %3f' % (network, k_optima[str(network)]))
     logging.info('')
 
     # Dump json file with optimal k and timestamp for the current analysis
@@ -156,7 +157,7 @@ def calculate_healthy_optimal_k(roi_input_basepath, output_basepath, subjects, n
 
     dump_golden_subjects_json(output_path, network_type, subjects, window_size, data_analysis_type)
 
-    return
+    return healthy_k_optima
 
 
 def check_number_networks(subjects, input_basepath, network_type):
@@ -397,6 +398,55 @@ def data_analysis_subject_basepath(basepath,
     else:
         return os.path.join(subject_base_path, subject)
 
+def calculate_golden_centroids(subjects, output_basepath, network_type, window_type, data_analysis_type, nclusters,
+                               rand_ind, nregions, ntpoints, nnetwork_keys):
+
+    dynamic_measures_golden_subjects = np.zeros((nregions * nregions, ntpoints * len(subjects)))
+    # load dynamic info for subjects and store it into one big matrix (82 x (153 x 20))
+    for subject_i in range(len(subjects)):
+        subject_path = data_analysis_subject_basepath(output_basepath,
+                                                      network_type,
+                                                      window_type,
+                                                      data_analysis_type,
+                                                      nclusters,
+                                                      rand_ind,
+                                                      subjects[subject_i])
+        dynamic_measures = {}
+        for network in range(nnetwork_keys):
+            if data_analysis_type == 'synchrony':
+                dynamic_measures = pickle.load(
+                    open(os.path.join(subject_path, 'thresholded_synchrony.pickle'),
+                         'rb'))
+
+            # TODO: Graph analysis is not yet implemented
+            elif data_analysis_type == 'graph_theory':
+                dynamic_measures = pickle.load(
+                    open(os.path.join(subject_path, 'dynamic_measures.pickle'),
+                         'rb'))
+            # flatten data before passing it to matrix
+            dynamic_measures_flat = np.zeros((nregions * nregions, ntpoints))
+            for t in range(ntpoints):
+                dynamic_measures_flat[:, t] = \
+                    np.ndarray.flatten(dynamic_measures[network][:, :, t])
+
+            dynamic_measures_golden_subjects[:, (subject_i * ntpoints):((subject_i + 1) * ntpoints)] = dynamic_measures_flat
+
+            # Calculate the k means for synchrony.
+            kmeans = KMeans(n_clusters=nclusters)
+            kmeans.fit_transform(np.transpose(dynamic_measures_golden_subjects))
+            kmeans_labels = kmeans.labels_
+            kmeans_centroids = kmeans.cluster_centers_
+
+            all_centroids = np.zeros((nregions, nregions, nclusters))
+            for cluster in range(nclusters):
+                all_centroids[:, :, cluster] = kmeans_centroids[cluster, :].reshape((nregions, nregions))
+
+            # save centroids
+            pickle.dump(all_centroids,
+                        open(os.path.join(os.path.split(subject_path)[0],
+                                        'golden_subjects_centroids.pickle'),
+                             'wb'))
+
 def data_analysis(subjects,
                   input_basepath,
                   output_basepath,
@@ -463,9 +513,10 @@ def data_analysis(subjects,
         # Compute optimal threshold.
         # Note: Golden subjects's id are hardcoded inside the json file and are not used for further analysis
         if golden_subjects:
-            calculate_healthy_optimal_k(input_basepath, output_basepath, subjects, network_type, window_size, window_type,
+            k_optima = calculate_healthy_optimal_k(input_basepath, output_basepath, subjects, network_type, window_size, window_type,
                                                data_analysis_type, nclusters, rand_ind)
-            return
+
+
         else:
             filepath = data_analysis_subject_basepath(output_basepath, network_type, window_type, data_analysis_type,
                                                        nclusters, rand_ind, subjects[0])
@@ -550,146 +601,165 @@ def data_analysis(subjects,
                     synchrony_bin[:, :, t] = mirror_array(synchrony_bin[:, :, t])
                 synchrony_bins[network] = synchrony_bin
 
-            # The actual measures we save depend on the data analysis type.
-            if data_analysis_type == 'synchrony':
-                measure = 'synchrony'
+
+            # TODO: save synchrony_bins matrix
+            pickle.dump(synchrony_bins,
+                        open(os.path.join(subject_path,
+                                          'thresholded_synchrony.pickle'),
+                             'wb'))
+
+    if data_analysis_type == 'synchrony':
+        measure = 'synchrony'
+        for network in range(nnetwork_keys):
+            nregions = synchrony_bins[network].shape[0]
+            ntpoints = synchrony_bins[network].shape[2]
+            if golden_subjects:
+                calculate_golden_centroids(subjects, output_basepath, network_type, window_type, data_analysis_type, nclusters,
+                                           rand_ind, nregions, ntpoints, nnetwork_keys)
+                return
+            else:
                 shannon_entropy_measures = {}
-                for network in range(nnetwork_keys):
-                    # Flatten the synchrony bin for the current network.
-                    nregions = synchrony_bins[network].shape[0]
-                    ntpoints = synchrony_bins[network].shape[2]
-                    synchrony_bin_flat = np.zeros((ntpoints, nregions * nregions))
-                    for t in range(ntpoints):
-                        synchrony_bin_flat[t, :] = \
-                            np.ndarray.flatten(synchrony_bins[network][:, :, t])
+                # Flatten the synchrony bin for the current network.
+                synchrony_bin_flat = np.zeros((ntpoints, nregions * nregions))
+                for t in range(ntpoints):
+                    synchrony_bin_flat[t, :] = \
+                        np.ndarray.flatten(synchrony_bins[network][:, :, t])
 
-                    # Calculate the k means for synchrony.
-                    kmeans = KMeans(n_clusters=nclusters)
-                    kmeans.fit_transform(synchrony_bin_flat)
-                    kmeans_labels = kmeans.labels_
-                    synchrony_entropy = entropy(kmeans_labels)
+                # Calculate the k means for synchrony.
+                kmeans = KMeans(n_clusters=nclusters)
+                kmeans.fit_transform(synchrony_bin_flat)
+                kmeans_labels = kmeans.labels_
+                synchrony_entropy = entropy(kmeans_labels)
 
-                    # Save the results.
-                    shannon_entropy_measures[network] = {}
-                    shannon_entropy_measures[network][measure] = {
-                        'centroids': kmeans.cluster_centers_,
-                        'entropy': synchrony_entropy
-                    }
+                # Save the results.
+                shannon_entropy_measures[network] = {}
+                shannon_entropy_measures[network][measure] = {
+                    'centroids': kmeans.cluster_centers_,
+                    'entropy': synchrony_entropy
+                }
 
                 # Dump the results in a pickle file.
                 pickle.dump(shannon_entropy_measures,
                             open(os.path.join(subject_path,
                                               'synchrony_shannon_entropy_measures.pickle'),
                                  'wb'))
-            elif data_analysis_type == 'graph_analysis':
-                graph_theory_measures = {}
-                shannon_entropy_measures = {}
-                for network in range(nnetwork_keys):
-                    nregions = synchrony_bins[network].shape[0]
-                    ntpoints = synchrony_bins[network].shape[2]
-                    graph_theory_measures[network] = {}
 
-                    # Modularity/Flexibility:
-                    # -------------------
-                    # For the fist iteration each node is considered part of a separate community. All following iterations
-                    # use previous knowledge to find only the nodes that change communities.
-                    community_affiliation = np.arange(nregions) + 1
-                    community_0 = 0
-                    flexibility_time = np.zeros((ntpoints, nregions), dtype=bool)
-                    for t in range(ntpoints):
-                        W = synchrony_bins[network][:, :, t]
-                        community_t, q = community_louvain(W, ci=community_affiliation)
-                        # True: are the elemets that are different between time points
-                        flexibility_time[t] = community_t - community_0 != 0
-                        community_0 = community_t
-                        community_affiliation = community_t
+        # load calculated golden centroids
 
-                    # Eliminate first time point
-                    flexibility_time = flexibility_time[1:]
+        #for subject in subjects:
+        # do k-means
+            # The actual measures we save depend on the data analysis type.
 
-                    # calculate flexibility for each node
-                    flexibility_regions = np.sum(flexibility_time, axis=0)
-                    graph_theory_measures[network]['flexibility'] = flexibility_regions
-
-
-                    # Note: Because K-means will be performed over time and of the way
-                    #  the data is defined all measures will need to transposed.
-                    # Degree centrality:
-                    # -------------------
-                    # Number of links connected to each node
-                    degree_centrality = degrees_und(synchrony_bins[network])
-                    graph_theory_measures[network]['degree_centrality'] = \
-                        np.transpose(degree_centrality)
-
-                    # Cluster Coefficient:
-                    # ----------------------
-                    # Calculate cluster Coefficient at each time point.
-                    cluster_coefficient = np.zeros((nregions, ntpoints))
-                    for t in range(ntpoints):
-                        cluster_coefficient[:, t] = clustering_coef_bu(synchrony_bins[network][:, :, t])
-                    graph_theory_measures[network]['cluster_coefficient'] = np.transpose(cluster_coefficient)
-
-
-                    # # Shortest path length:
-                    # # ----------------------
-                    # # Calculate the shortest path length between all nodes. The matrix for eacht time point
-                    # # is flattened.
-                    # shortest_path = np.zeros((nregions * nregions, ntpoints))
-                    # for t in range(ntpoints):
-                    #     _, tmp_shortest_path = breadthdist(synchrony_bins[network][:, :, t])
-                    #     shortest_path[:, t] = tmp_shortest_path.flatten()
-                    # graph_theory_measures[network]['shortest_path'] = np.transpose(shortest_path)
-
-                    # Global efficiency
-                    # ----------------------
-                    # Returns only a float. For comparision between groups the standard deviation will
-                    # be used.
-                    networks_global_efficiency = {}
-                    global_efficiency = np.zeros(ntpoints)
-                    for t in range(ntpoints):
-                        global_efficiency[t] = efficiency_bin(synchrony_bins[network][:, :, t])
-                    graph_theory_measures[network]['global_efficiency'] = global_efficiency
-
-                    # Weight
-                    # -------------------
-                    weight = np.zeros((ntpoints, nregions))
-                    w = np.multiply(synchrony[network], synchrony_bins[network])
-                    for t in range(ntpoints):
-                        for roi in range(nregions):
-                            weight[t, roi] = np.average(w[:, roi, t])
-                    graph_theory_measures[network]['weight'] = weight
-
-                    # Perform K-means and calculate Shannon Entropy for each
-                    # graph theory measurement.
-                    kmeans = KMeans(n_clusters=nclusters)
-                    shannon_entropy_measures[network] = {}
-                    # Select only keys that will be used on the analysis
-                    kmeans_measures = ['weight', 'cluster_coefficient', 'degree_centrality']
-                    for measure in kmeans_measures:
-                        shannon_entropy_measures[network][measure] = {}
-                        measures = shannon_entropy_measures[network][measure]
-
-                        # Calculate the k-means for the current measure.
-                        kmeans.fit_transform(graph_theory_measures[network][measure])
-
-                        # Save the results in the measure-specific dictionary.
-                        measures['labels'] = kmeans.labels_
-                        measures['entropy'] = entropy(shannon_entropy_measures[network][measure]['labels'])
-
-
-                # Dump results into three pickle files.
-                pickle.dump(graph_theory_measures,
-                            open(os.path.join(subject_path,
-                                              'graph_analysis_measures.pickle'),
-                                 'wb'))
-                pickle.dump(shannon_entropy_measures,
-                            open(os.path.join(subject_path,
-                                              'graph_analysis_shannon_entropy_measures.pickle'),
-                                 'wb'))
-                pickle.dump(networks_global_efficiency,
-                            open(os.path.join(subject_path,
-                                              'global_efficiency.pickle'),
-                                 'wb'))
-            else:
-                raise ValueError('Unrecognised data analysis type: %s' %
-                                 (data_analysis_type))
+                    ###########################
+            # elif data_analysis_type == 'graph_analysis':
+            #     graph_theory_measures = {}
+            #     shannon_entropy_measures = {}
+            #     for network in range(nnetwork_keys):
+            #         nregions = synchrony_bins[network].shape[0]
+            #         ntpoints = synchrony_bins[network].shape[2]
+            #         graph_theory_measures[network] = {}
+            #
+            #         # Modularity/Flexibility:
+            #         # -------------------
+            #         # For the fist iteration each node is considered part of a separate community. All following iterations
+            #         # use previous knowledge to find only the nodes that change communities.
+            #         community_affiliation = np.arange(nregions) + 1
+            #         community_0 = 0
+            #         flexibility_time = np.zeros((ntpoints, nregions), dtype=bool)
+            #         for t in range(ntpoints):
+            #             W = synchrony_bins[network][:, :, t]
+            #             community_t, q = community_louvain(W, ci=community_affiliation)
+            #             # True: are the elemets that are different between time points
+            #             flexibility_time[t] = community_t - community_0 != 0
+            #             community_0 = community_t
+            #             community_affiliation = community_t
+            #
+            #         # Eliminate first time point
+            #         flexibility_time = flexibility_time[1:]
+            #
+            #         # calculate flexibility for each node
+            #         flexibility_regions = np.sum(flexibility_time, axis=0)
+            #         graph_theory_measures[network]['flexibility'] = flexibility_regions
+            #
+            #
+            #         # Note: Because K-means will be performed over time and of the way
+            #         #  the data is defined all measures will need to transposed.
+            #         # Degree centrality:
+            #         # -------------------
+            #         # Number of links connected to each node
+            #         degree_centrality = degrees_und(synchrony_bins[network])
+            #         graph_theory_measures[network]['degree_centrality'] = \
+            #             np.transpose(degree_centrality)
+            #
+            #         # Cluster Coefficient:
+            #         # ----------------------
+            #         # Calculate cluster Coefficient at each time point.
+            #         cluster_coefficient = np.zeros((nregions, ntpoints))
+            #         for t in range(ntpoints):
+            #             cluster_coefficient[:, t] = clustering_coef_bu(synchrony_bins[network][:, :, t])
+            #         graph_theory_measures[network]['cluster_coefficient'] = np.transpose(cluster_coefficient)
+            #
+            #
+            #         # # Shortest path length:
+            #         # # ----------------------
+            #         # # Calculate the shortest path length between all nodes. The matrix for eacht time point
+            #         # # is flattened.
+            #         # shortest_path = np.zeros((nregions * nregions, ntpoints))
+            #         # for t in range(ntpoints):
+            #         #     _, tmp_shortest_path = breadthdist(synchrony_bins[network][:, :, t])
+            #         #     shortest_path[:, t] = tmp_shortest_path.flatten()
+            #         # graph_theory_measures[network]['shortest_path'] = np.transpose(shortest_path)
+            #
+            #         # Global efficiency
+            #         # ----------------------
+            #         # Returns only a float. For comparision between groups the standard deviation will
+            #         # be used.
+            #         networks_global_efficiency = {}
+            #         global_efficiency = np.zeros(ntpoints)
+            #         for t in range(ntpoints):
+            #             global_efficiency[t] = efficiency_bin(synchrony_bins[network][:, :, t])
+            #         graph_theory_measures[network]['global_efficiency'] = global_efficiency
+            #
+            #         # Weight
+            #         # -------------------
+            #         weight = np.zeros((ntpoints, nregions))
+            #         w = np.multiply(synchrony[network], synchrony_bins[network])
+            #         for t in range(ntpoints):
+            #             for roi in range(nregions):
+            #                 weight[t, roi] = np.average(w[:, roi, t])
+            #         graph_theory_measures[network]['weight'] = weight
+            #
+            #         # Perform K-means and calculate Shannon Entropy for each
+            #         # graph theory measurement.
+            #         kmeans = KMeans(n_clusters=nclusters)
+            #         shannon_entropy_measures[network] = {}
+            #         # Select only keys that will be used on the analysis
+            #         kmeans_measures = ['weight', 'cluster_coefficient', 'degree_centrality']
+            #         for measure in kmeans_measures:
+            #             shannon_entropy_measures[network][measure] = {}
+            #             measures = shannon_entropy_measures[network][measure]
+            #
+            #             # Calculate the k-means for the current measure.
+            #             kmeans.fit_transform(graph_theory_measures[network][measure])
+            #
+            #             # Save the results in the measure-specific dictionary.
+            #             measures['labels'] = kmeans.labels_
+            #             measures['entropy'] = entropy(shannon_entropy_measures[network][measure]['labels'])
+            #
+            #
+            #     # Dump results into three pickle files.
+            #     pickle.dump(graph_theory_measures,
+            #                 open(os.path.join(subject_path,
+            #                                   'graph_analysis_measures.pickle'),
+            #                      'wb'))
+            #     pickle.dump(shannon_entropy_measures,
+            #                 open(os.path.join(subject_path,
+            #                                   'graph_analysis_shannon_entropy_measures.pickle'),
+            #                      'wb'))
+            #     pickle.dump(networks_global_efficiency,
+            #                 open(os.path.join(subject_path,
+            #                                   'global_efficiency.pickle'),
+            #                      'wb'))
+            # else:
+            #     raise ValueError('Unrecognised data analysis type: %s' %
+            #                      (data_analysis_type))
