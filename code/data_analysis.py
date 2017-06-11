@@ -18,7 +18,7 @@ from bct import (degrees_und, distance_bin, transitivity_bu, clustering_coef_bu,
                  randmio_und_connected, charpath, clustering, breadthdist, efficiency_bin,
                  community_louvain)
 from sklearn.cluster import KMeans
-
+from sklearn.decomposition import PCA
 
 
 def dump_golden_subjects_json(output_base_path, network_type, subjects, window_size, data_analysis_type):
@@ -563,16 +563,26 @@ def data_analysis(subjects,
                         synchrony_bin_flat[t, :] = \
                             np.ndarray.flatten(synchrony_bins[network][:, :, t])
 
+                    # Find the highest variance
+                    pca = PCA(n_components=8)
+                    reduced_synchrony_bin_flat = pca.fit_transform(synchrony_bin_flat)
+
+                    # Perform k-means on this reduced space and find centroids
+                    initial_kmeans = KMeans(n_clusters=nclusters)
+                    initial_kmeans.fit_transform(reduced_synchrony_bin_flat)
+                    # retransform centroids back to normal space
+                    cluster_centres = pca.inverse_transform(initial_kmeans.cluster_centers_)
+                    # use this centroids to perform kmeans
+
                     # Calculate the k means for synchrony.
-                    kmeans = KMeans(n_clusters=nclusters)
-                    kmeans.fit_transform(synchrony_bin_flat)
-                    kmeans_labels = kmeans.labels_
-                    synchrony_entropy = entropy(kmeans_labels)
+                    subject_kmeans = KMeans(n_clusters=nclusters, init=cluster_centres)
+                    subject_kmeans.fit_transform(synchrony_bin_flat)
+                    synchrony_entropy = entropy(subject_kmeans.labels_)
 
                     # Save the results.
                     shannon_entropy_measures[network] = {}
                     shannon_entropy_measures[network][measure] = {
-                        'centroids': kmeans.cluster_centers_,
+                        'centroids': subject_kmeans.cluster_centers_,
                         'entropy': synchrony_entropy
                     }
 
@@ -666,14 +676,26 @@ def data_analysis(subjects,
                     # Select only keys that will be used on the analysis
                     kmeans_measures = ['weight', 'cluster_coefficient', 'degree_centrality']
                     for measure in kmeans_measures:
+                        # Find the components with the highest variance
+                        pca = PCA(n_components=8)
+                        reduced_graph_theory = pca.fit_transform(graph_theory_measures[network][measure])
+
+                        # Perform k-means on this reduced space and find centroids
+                        initial_kmeans = KMeans(n_clusters=nclusters)
+                        initial_kmeans.fit_transform(reduced_graph_theory)
+                        # retransform centroids back to normal space
+                        cluster_centres = pca.inverse_transform(initial_kmeans.cluster_centers_)
+                        # use this centroids to perform kmeans
+
+                        # Calculate the k means for synchrony.
+                        subject_kmeans = KMeans(n_clusters=nclusters, init=cluster_centres)
+                        subject_kmeans.fit_transform(graph_theory_measures[network][measure])
                         shannon_entropy_measures[network][measure] = {}
                         measures = shannon_entropy_measures[network][measure]
 
-                        # Calculate the k-means for the current measure.
-                        kmeans.fit_transform(graph_theory_measures[network][measure])
 
                         # Save the results in the measure-specific dictionary.
-                        measures['labels'] = kmeans.labels_
+                        measures['labels'] = subject_kmeans.labels_
                         measures['entropy'] = entropy(shannon_entropy_measures[network][measure]['labels'])
 
 
