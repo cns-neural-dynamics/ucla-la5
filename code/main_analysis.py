@@ -166,8 +166,9 @@ subjects_filename = 'subjects.json'
 # Note: This needs to be setup before other local modules are imported and
 #       and before any local code is executed.
 import logging
+logpath = os.path.join(data_analysis_output_basepath, args.network_type, args.window_type, args.data_analysis_type)
 timestamp = time.strftime("%Y%m%d%H%M%S")
-log_filename = os.path.join(base_path_out, '%s_ucla5_%d.log' %(timestamp, args.nclusters))
+log_filename = os.path.join(logpath, '%s_ucla5_%d.log' %(timestamp, args.nclusters))
 formatter = logging.Formatter('%(message)s')
 log = logging.getLogger('')
 log.setLevel(logging.DEBUG)
