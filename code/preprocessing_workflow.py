@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import division
 
 import os
 from nipype.interfaces.fsl import Info, FSLCommand, MCFLIRT, MeanImage, TemporalFilter, IsotropicSmooth, BET, GLM, BinaryMaths
@@ -285,20 +286,28 @@ def preprocessing_pipeline(subject, base_path, preprocessing_type=None):
     mean_iso_smooth = Node(MeanImage(), name='Mean_Iso_Smmoth')
 
     # temporal filtering
-    # note: TR for this experiment is 2 and we are setting a filter of 100s.
+    # note: TR for this experiment is 2.
+    # Because we don't know the best filtering band we performing the analyis with 4 different filters.
     # Therefore, fwhm = 0.5 Hrz/0.01 Hrz = 50.
     # The function here, however, requires the fwhm (aka sigma) of this value, hence, its half.
+    highpass_hz = [0.04, 0.04, 0.01, 0.01]
+    lowpass_hz= [0.1, 0.07, 0.07, 0.1]
+    TR = 2
     temp_filt_ica = Node(TemporalFilter(), name='TemporalFilter_ICA')
-    temp_filt_ica.inputs.highpass_sigma = 2.5
-    temp_filt_ica.inputs.lowpass_sigma = 6.5
+    lowpass_sigma_list = [round((1 / TR) / (lowpass * 2), 2) for lowpass in lowpass_hz]
+    highpass_sigma_list = [round((1 / TR) / (highpass * 2), 2) for highpass in highpass_hz]
+    temp_filt_ica.iterables = [('lowpass_sigma', lowpass_sigma_list),
+                               ('highpass_sigma', highpass_sigma_list)]
 
     temp_filt_ica_glm = Node(TemporalFilter(), name='TemporalFilter_ICA_GLM')
-    temp_filt_ica_glm.inputs.highpass_sigma = 2.5
-    temp_filt_ica_glm.inputs.lowpass_sigma = 6.5
+    temp_filt_ica_glm.iterables = [('lowpass_sigma', lowpass_sigma_list),
+                                   ('highpass_sigma', highpass_sigma_list)]
 
     temp_filt_glm = Node(TemporalFilter(), name='TemporalFilter_GLM')
-    temp_filt_glm.inputs.highpass_sigma = 2.5
-    temp_filt_glm.inputs.lowpass_sigma = 6.5
+    temp_filt_glm.iterables = [('lowpass_sigma', lowpass_sigma_list),
+                               ('highpass_sigma', highpass_sigma_list)]
+    # temp_filt_glm.inputs.highpass_sigma = 2.5
+    # temp_filt_glm.inputs.lowpass_sigma = 6.5
 
     final_ica = Node(BinaryMaths(), name='AddMean_ICA')
     final_ica.inputs.operation = 'add'
